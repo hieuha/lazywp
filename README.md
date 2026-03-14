@@ -73,6 +73,10 @@ lazywp download --list plugins.txt
 lazywp vuln --slug contest-gallery
 lazywp vuln --slug akismet --source wordfence
 
+# Batch check from file (one slug per line)
+lazywp vuln --list slugs.txt
+lazywp vuln --list slugs.txt --download
+
 # Top vulnerable plugins
 lazywp vuln --top 10 --cwe-type sqli
 lazywp vuln --top 5 --severity critical --detail

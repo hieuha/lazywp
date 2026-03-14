@@ -1,18 +1,22 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/hieuha/lazywp/internal/client"
 	"github.com/hieuha/lazywp/internal/downloader"
+	"github.com/hieuha/lazywp/internal/storage"
 	"github.com/spf13/cobra"
 )
 
 var (
 	vulnSlug     string
+	vulnList     string
 	vulnTop      int
 	vulnDownload bool
 	vulnSource   string
@@ -20,7 +24,7 @@ var (
 	vulnSeverity string
 	vulnMonth    int
 	vulnYear     int
-	vulnDetail bool
+	vulnDetail   bool
 )
 
 var vulnCmd = &cobra.Command{
@@ -32,6 +36,7 @@ var vulnCmd = &cobra.Command{
 
 func init() {
 	vulnCmd.Flags().StringVar(&vulnSlug, "slug", "", "Slug to look up vulnerabilities for")
+	vulnCmd.Flags().StringVar(&vulnList, "list", "", "Path to file with slugs (one per line)")
 	vulnCmd.Flags().IntVar(&vulnTop, "top", 0, "Show top N most vulnerable items (Wordfence)")
 	vulnCmd.Flags().BoolVar(&vulnDownload, "download", false, "Download items listed in results")
 	vulnCmd.Flags().StringVar(&vulnSource, "source", "all", "Vulnerability source: wpscan|nvd|wordfence|all")
@@ -72,12 +77,15 @@ func printQueryInfo() {
 }
 
 func runVuln(cmd *cobra.Command, args []string) error {
-	if vulnSlug == "" && vulnTop == 0 {
-		return fmt.Errorf("must provide --slug or --top")
+	if vulnSlug == "" && vulnList == "" && vulnTop == 0 {
+		return fmt.Errorf("must provide --slug, --list, or --top")
 	}
 
 	ctx := context.Background()
 
+	if vulnList != "" {
+		return runVulnBatch(ctx)
+	}
 	if vulnSlug != "" {
 		return runVulnBySlug(ctx)
 	}
@@ -206,6 +214,121 @@ func runVulnTop(ctx context.Context) error {
 		printBatchResult(result)
 	}
 	return nil
+}
+
+// runVulnBatch checks vulnerabilities for multiple slugs from a file.
+func runVulnBatch(ctx context.Context) error {
+	slugs, err := readSlugListFile(vulnList)
+	if err != nil {
+		return err
+	}
+	if len(slugs) == 0 {
+		return fmt.Errorf("no slugs found in %s", vulnList)
+	}
+
+	if !quiet && outputFmt == "table" {
+		fmt.Printf("Checking vulnerabilities for %d slugs...\n\n", len(slugs))
+	}
+	printCacheSummary("wordfence", "wpscan", "nvd")
+
+	type slugResult struct {
+		Slug  string              `json:"slug"`
+		Vulns []storage.Vulnerability `json:"vulns"`
+	}
+	var allResults []slugResult
+	var downloadSlugs []string
+
+	for _, slug := range slugs {
+		vulns, warnings := appDeps.VulnAgg.FetchForSlug(ctx, slug, appDeps.ItemType)
+		if outputFmt == "table" {
+			for _, w := range warnings {
+				fmt.Printf("warning [%s]: %s\n", slug, w)
+			}
+		}
+
+		allResults = append(allResults, slugResult{Slug: slug, Vulns: vulns})
+
+		if outputFmt == "table" {
+			if len(vulns) == 0 {
+				fmt.Printf("%s%s%s: no vulnerabilities found\n", ansiBoldGreen, slug, ansiReset)
+			} else {
+				fmt.Printf("%s%s%s: %d vulnerabilities\n", ansiBoldRed, slug, ansiReset, len(vulns))
+				for j, v := range vulns {
+					cve := v.CVE
+					if cve == "" {
+						cve = "N/A"
+					}
+					fixed := v.FixedIn
+					if fixed == "" {
+						fixed = "unfixed"
+					}
+					fmt.Printf("  %d. %-18s  CVSS:%s  %s  (fixed: %s)\n",
+						j+1, cve, colorCVSS(v.CVSS), vulnTitle(v.Title), fixed)
+				}
+			}
+			fmt.Println()
+		}
+
+		if vulnDownload && len(vulns) > 0 {
+			downloadSlugs = append(downloadSlugs, slug)
+		}
+	}
+
+	// JSON/CSV output
+	if outputFmt != "table" {
+		fmtr.JSON(allResults)
+	}
+
+	// Summary
+	vulnCount := 0
+	affectedCount := 0
+	for _, r := range allResults {
+		if len(r.Vulns) > 0 {
+			affectedCount++
+			vulnCount += len(r.Vulns)
+		}
+	}
+	if outputFmt == "table" {
+		fmt.Printf("Summary: %d/%d slugs vulnerable, %d total CVEs\n",
+			affectedCount, len(slugs), vulnCount)
+	}
+
+	if vulnDownload && len(downloadSlugs) > 0 {
+		jobs := make([]downloader.DownloadJob, len(downloadSlugs))
+		for i, s := range downloadSlugs {
+			jobs[i] = downloader.DownloadJob{Slug: s, ItemType: appDeps.ItemType, Force: forceDown}
+		}
+		result := appDeps.Engine.DownloadBatch(ctx, jobs)
+		printBatchResult(result)
+	}
+	return nil
+}
+
+// readSlugListFile reads a file of slugs (one per line, # comments allowed).
+func readSlugListFile(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open list file: %w", err)
+	}
+	defer f.Close()
+
+	seen := map[string]bool{}
+	var slugs []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if !seen[line] {
+			seen[line] = true
+			slugs = append(slugs, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read list file: %w", err)
+	}
+	return slugs, nil
 }
 
 // vulnTitle returns the title, truncated per config title_max_len (0 = no truncation).

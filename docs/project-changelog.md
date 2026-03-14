@@ -4,6 +4,10 @@ All notable changes to lazywp are documented here.
 
 ## [Unreleased]
 
+### Added
+- `vuln --list slugs.txt` — batch vulnerability check for multiple slugs from file
+- Per-slug colored output with vulnerability count and summary
+
 ### Fixed
 - Exploit lookup gracefully skips remaining CVEs when all PD API keys hit rate limit (instead of fatal error)
 - Rotates through all configured PD keys before giving up

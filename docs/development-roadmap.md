@@ -19,10 +19,11 @@
 - Add theme-specific metadata fields (template, parent theme)
 - Theme-specific test coverage
 
-### 2.2 Batch Vuln Check
-- `lazywp vuln --list slugs.txt` — check vulnerabilities for multiple slugs from file
-- Mirrors existing `download --list` pattern
-- Progress tracking for batch operations
+### 2.2 Batch Vuln Check (COMPLETE)
+- [x] `lazywp vuln --list slugs.txt` — check vulnerabilities for multiple slugs from file
+- [x] Mirrors existing `download --list` pattern
+- [x] Per-slug colored output with summary
+- [x] `--download` flag to download vulnerable plugins
 
 ### 2.3 Report Generation
 - `lazywp report <scan.json>` — generate formatted vulnerability reports
