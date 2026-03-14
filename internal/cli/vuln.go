@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ var (
 	vulnMonth    int
 	vulnYear     int
 	vulnDetail   bool
+	vulnOutput   string
 )
 
 var vulnCmd = &cobra.Command{
@@ -45,6 +47,7 @@ func init() {
 	vulnCmd.Flags().IntVar(&vulnMonth, "month", 0, "Wordfence month filter (1-12)")
 	vulnCmd.Flags().IntVar(&vulnYear, "year", 0, "Wordfence year filter (e.g. 2024)")
 	vulnCmd.Flags().BoolVar(&vulnDetail, "detail", false, "Show detailed CVEs for each plugin in top results")
+	vulnCmd.Flags().StringVarP(&vulnOutput, "output", "o", "", "Write results to file (default: stdout)")
 	rootCmd.AddCommand(vulnCmd)
 }
 
@@ -76,6 +79,19 @@ func printQueryInfo() {
 	fmt.Printf("Query: %s\n\n", strings.Join(parts, ", "))
 }
 
+// vulnFormatter returns a Formatter targeting a file (when --output is set) or
+// the default stdout formatter. The caller must call the returned closer.
+func vulnFormatter() (outFmtr *Formatter, closer func(), err error) {
+	if vulnOutput == "" {
+		return fmtr, func() {}, nil
+	}
+	f, err := os.Create(vulnOutput)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create output file: %w", err)
+	}
+	return NewFormatter(outputFmt, f), func() { f.Close() }, nil
+}
+
 func runVuln(cmd *cobra.Command, args []string) error {
 	if vulnSlug == "" && vulnList == "" && vulnTop == 0 {
 		return fmt.Errorf("must provide --slug, --list, or --top")
@@ -96,6 +112,12 @@ func runVulnBySlug(ctx context.Context) error {
 	printQueryInfo()
 	printCacheSummary("wordfence", "wpscan", "nvd")
 
+	outFmtr, closer, err := vulnFormatter()
+	if err != nil {
+		return err
+	}
+	defer closer()
+
 	vulns, warnings := appDeps.VulnAgg.FetchForSlug(ctx, vulnSlug, appDeps.ItemType)
 	if outputFmt == "table" {
 		for _, w := range warnings {
@@ -107,13 +129,17 @@ func runVulnBySlug(ctx context.Context) error {
 		if outputFmt == "table" {
 			fmt.Printf("No vulnerabilities found for %s\n", vulnSlug)
 		} else {
-			fmtr.Print(nil, nil, vulns)
+			outFmtr.Print(nil, nil, vulns)
 		}
 		return nil
 	}
 
 	if outputFmt == "sarif" {
-		return writeVulnSARIF(os.Stdout, vulnSlug, vulns)
+		var w io.Writer = os.Stdout
+		if vulnOutput != "" {
+			w = outFmtr.writer
+		}
+		return writeVulnSARIF(w, vulnSlug, vulns)
 	}
 
 	headers := []string{"CVE", "CVSS", "Type", "Title", "Affected", "Source", "Fixed In"}
@@ -129,7 +155,7 @@ func runVulnBySlug(ctx context.Context) error {
 			v.FixedIn,
 		}
 	}
-	fmtr.Print(headers, rows, vulns)
+	outFmtr.Print(headers, rows, vulns)
 
 	if vulnDownload {
 		ctx2 := context.Background()
@@ -143,6 +169,12 @@ func runVulnBySlug(ctx context.Context) error {
 func runVulnTop(ctx context.Context) error {
 	printQueryInfo()
 	printCacheSummary("wordfence")
+
+	outFmtr, closer, err := vulnFormatter()
+	if err != nil {
+		return err
+	}
+	defer closer()
 
 	filters := client.WordfenceFilters{
 		CWEType:    vulnCWE,
@@ -159,53 +191,64 @@ func runVulnTop(ctx context.Context) error {
 		if outputFmt == "table" {
 			fmt.Println("No vulnerable items found.")
 		} else {
-			fmtr.Print(nil, nil, items)
+			outFmtr.Print(nil, nil, items)
 		}
 		return nil
 	}
 
-	// Strip Vulns from JSON/CSV output when --detail is not requested.
-	if !vulnDetail {
-		for i := range items {
-			items[i].Vulns = nil
+	// When --detail is used with structured formats, flatten to one row per CVE.
+	if vulnDetail && outputFmt != "table" {
+		flat := flattenVulnItems(items)
+		if outputFmt == "json" {
+			outFmtr.JSON(flat)
+		} else {
+			headers, rows := flattenVulnRows(flat)
+			outFmtr.CSV(headers, rows)
 		}
-	}
-
-	headers := []string{"#", "Slug", "Vuln Count", "Max CVSS"}
-	rows := make([][]string, len(items))
-	for i, it := range items {
-		rows[i] = []string{
-			strconv.Itoa(i + 1),
-			it.Slug,
-			strconv.Itoa(it.VulnCount),
-			strconv.FormatFloat(it.MaxCVSS, 'f', 1, 64),
-		}
-	}
-	fmtr.Print(headers, rows, items)
-
-	if vulnDetail && outputFmt == "table" {
-		fmt.Println()
-		for _, it := range items {
-			fmt.Printf("--- %s (%d vulns, max CVSS %.1f) ---\n", it.Slug, it.VulnCount, it.MaxCVSS)
-			for _, v := range it.Vulns {
-				cve := v.CVE
-				if cve == "" {
-					cve = "N/A"
-				}
-				fixed := v.FixedIn
-				if fixed == "" {
-					fixed = "unfixed"
-				}
-				fmt.Printf("  %-18s  CVSS:%-4s  %-8s  %s  (affected: %s, fixed: %s)\n",
-					cve,
-					strconv.FormatFloat(v.CVSS, 'f', 1, 64),
-					v.Type,
-					vulnTitle(v.Title),
-					v.AffectedVersions,
-					fixed,
-				)
+	} else {
+		// Strip Vulns from JSON/CSV output when --detail is not requested.
+		if !vulnDetail {
+			for i := range items {
+				items[i].Vulns = nil
 			}
+		}
+
+		headers := []string{"#", "Slug", "Vuln Count", "Max CVSS"}
+		rows := make([][]string, len(items))
+		for i, it := range items {
+			rows[i] = []string{
+				strconv.Itoa(i + 1),
+				it.Slug,
+				strconv.Itoa(it.VulnCount),
+				strconv.FormatFloat(it.MaxCVSS, 'f', 1, 64),
+			}
+		}
+		outFmtr.Print(headers, rows, items)
+
+		if vulnDetail && outputFmt == "table" {
 			fmt.Println()
+			for _, it := range items {
+				fmt.Printf("--- %s (%d vulns, max CVSS %.1f) ---\n", it.Slug, it.VulnCount, it.MaxCVSS)
+				for _, v := range it.Vulns {
+					cve := v.CVE
+					if cve == "" {
+						cve = "N/A"
+					}
+					fixed := v.FixedIn
+					if fixed == "" {
+						fixed = "unfixed"
+					}
+					fmt.Printf("  %-18s  CVSS:%-4s  %-8s  %s  (affected: %s, fixed: %s)\n",
+						cve,
+						strconv.FormatFloat(v.CVSS, 'f', 1, 64),
+						v.Type,
+						vulnTitle(v.Title),
+						v.AffectedVersions,
+						fixed,
+					)
+				}
+				fmt.Println()
+			}
 		}
 	}
 
@@ -229,6 +272,12 @@ func runVulnBatch(ctx context.Context) error {
 	if len(slugs) == 0 {
 		return fmt.Errorf("no slugs found in %s", vulnList)
 	}
+
+	outFmtr, closer, err := vulnFormatter()
+	if err != nil {
+		return err
+	}
+	defer closer()
 
 	if !quiet && outputFmt == "table" {
 		fmt.Printf("Checking vulnerabilities for %d slugs...\n\n", len(slugs))
@@ -280,7 +329,7 @@ func runVulnBatch(ctx context.Context) error {
 
 	// JSON/CSV output
 	if outputFmt != "table" {
-		fmtr.JSON(allResults)
+		outFmtr.JSON(allResults)
 	}
 
 	// Summary
@@ -306,6 +355,61 @@ func runVulnBatch(ctx context.Context) error {
 		printBatchResult(result)
 	}
 	return nil
+}
+
+// flatVuln is a single CVE row with the parent plugin slug attached.
+type flatVuln struct {
+	Slug             string  `json:"slug"`
+	CVE              string  `json:"cve"`
+	CVSS             float64 `json:"cvss"`
+	Type             string  `json:"type"`
+	Title            string  `json:"title"`
+	AffectedVersions string  `json:"affected_versions"`
+	FixedIn          string  `json:"fixed_in"`
+	Source           string  `json:"source"`
+}
+
+// flattenVulnItems expands VulnerableItems into one flatVuln per CVE.
+func flattenVulnItems(items []client.VulnerableItem) []flatVuln {
+	var out []flatVuln
+	for _, it := range items {
+		for _, v := range it.Vulns {
+			title := v.Title
+			if outputFmt == "table" {
+				title = vulnTitle(v.Title)
+			}
+			out = append(out, flatVuln{
+				Slug:             it.Slug,
+				CVE:              v.CVE,
+				CVSS:             v.CVSS,
+				Type:             v.Type,
+				Title:            title,
+				AffectedVersions: v.AffectedVersions,
+				FixedIn:          v.FixedIn,
+				Source:           v.Source,
+			})
+		}
+	}
+	return out
+}
+
+// flattenVulnRows converts flatVuln slice into CSV headers and rows.
+func flattenVulnRows(flat []flatVuln) ([]string, [][]string) {
+	headers := []string{"Slug", "CVE", "CVSS", "Type", "Title", "Affected Versions", "Fixed In", "Source"}
+	rows := make([][]string, len(flat))
+	for i, f := range flat {
+		rows[i] = []string{
+			f.Slug,
+			f.CVE,
+			strconv.FormatFloat(f.CVSS, 'f', 1, 64),
+			f.Type,
+			f.Title,
+			f.AffectedVersions,
+			f.FixedIn,
+			f.Source,
+		}
+	}
+	return headers, rows
 }
 
 // readSlugListFile reads a file of slugs (one per line, # comments allowed).

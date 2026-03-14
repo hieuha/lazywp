@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -24,17 +23,18 @@ var (
 
 var convertCmd = &cobra.Command{
 	Use:   "convert <json-file>",
-	Short: "Convert scan JSON to other formats with filtering",
-	Long: `Read a scan result JSON file (from lazywp scan -f json) and convert it
+	Short: "Convert scan/vuln JSON to other formats with filtering",
+	Long: `Read a JSON file from lazywp scan or lazywp vuln and convert it
 to table, CSV, or JSON with optional filters.
 
+Auto-detects the input format (scan results, vuln flat CVEs, or vuln top items).
+
 Examples:
-  lazywp convert scan.json -f table --detail
   lazywp convert scan.json -f csv -o report.csv
   lazywp convert scan.json --slug elementor --detail
   lazywp convert scan.json --vuln-only --min-cvss 7.0
-  lazywp convert scan.json --cve CVE-2024-1234
-  lazywp convert scan.json --status vulnerable -f csv -o critical.csv`,
+  lazywp convert vuln.json -f csv --slug contact-form
+  lazywp convert vuln.json --min-cvss 9.0 -f csv -o critical.csv`,
 	Args: cobra.ExactArgs(1),
 	RunE: runConvert,
 }
@@ -64,23 +64,6 @@ func runConvert(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("read file: %w", err)
 	}
 
-	var results []ScanResult
-	if err := json.Unmarshal(data, &results); err != nil {
-		return fmt.Errorf("parse JSON: %w", err)
-	}
-
-	// Apply filters
-	filtered := filterScanResults(results)
-
-	if len(filtered) == 0 {
-		if outputFmt == "table" {
-			fmt.Println("No results match the given filters.")
-		} else {
-			fmtr.Print(nil, nil, []ScanResult{})
-		}
-		return nil
-	}
-
 	// Build output formatter
 	outFmtr := fmtr
 	if convertOutput != "" {
@@ -92,7 +75,33 @@ func runConvert(cmd *cobra.Command, args []string) error {
 		outFmtr = NewFormatter(outputFmt, f)
 	}
 
-	// Partition for table display
+	// Auto-detect format: try scan results first, then vuln flat CVEs.
+	var scanResults []ScanResult
+	if err := json.Unmarshal(data, &scanResults); err == nil && len(scanResults) > 0 && scanResults[0].Plugin.Slug != "" {
+		return convertScanJSON(outFmtr, scanResults)
+	}
+
+	var vulnResults []flatVuln
+	if err := json.Unmarshal(data, &vulnResults); err == nil && len(vulnResults) > 0 && vulnResults[0].CVE != "" {
+		return convertVulnJSON(outFmtr, vulnResults)
+	}
+
+	return fmt.Errorf("unrecognized JSON format (expected scan or vuln output)")
+}
+
+// convertScanJSON handles JSON from `lazywp scan`.
+func convertScanJSON(outFmtr *Formatter, results []ScanResult) error {
+	filtered := filterScanResults(results)
+
+	if len(filtered) == 0 {
+		if outputFmt == "table" {
+			fmt.Println("No results match the given filters.")
+		} else {
+			outFmtr.Print(nil, nil, []ScanResult{})
+		}
+		return nil
+	}
+
 	var vulnerable, safe []ScanResult
 	for _, r := range filtered {
 		if r.IsVulnerable {
@@ -112,7 +121,33 @@ func runConvert(cmd *cobra.Command, args []string) error {
 		printScanTable(vulnerable, safe)
 		fmt.Printf("Summary: %d scanned, %d vulnerable, %d safe\n", len(filtered), len(vulnerable), len(safe))
 	}
+	return nil
+}
 
+// convertVulnJSON handles JSON from `lazywp vuln --detail`.
+func convertVulnJSON(outFmtr *Formatter, results []flatVuln) error {
+	filtered := filterVulnResults(results)
+
+	if len(filtered) == 0 {
+		if outputFmt == "table" {
+			fmt.Println("No results match the given filters.")
+		} else {
+			outFmtr.JSON([]flatVuln{})
+		}
+		return nil
+	}
+
+	switch outputFmt {
+	case "json":
+		outFmtr.JSON(filtered)
+	case "csv":
+		headers, rows := flattenVulnRows(filtered)
+		outFmtr.CSV(headers, rows)
+	default:
+		headers, rows := flattenVulnRows(filtered)
+		outFmtr.Table(headers, rows)
+		fmt.Printf("\nSummary: %d CVEs across %d plugins\n", len(filtered), countUniqueVulnSlugs(filtered))
+	}
 	return nil
 }
 
@@ -182,15 +217,32 @@ func filterScanResults(results []ScanResult) []ScanResult {
 	return filtered
 }
 
-// init registers ScanResult's ScannedPlugin type for JSON unmarshalling.
-// flattenScanResults is reused from scan.go.
-// colorCVSS, printScanTable, printScanSummary are reused from scan.go.
+// filterVulnResults applies slug/CVSS/CVE filters to flat vuln results.
+func filterVulnResults(results []flatVuln) []flatVuln {
+	filtered := make([]flatVuln, 0, len(results))
+	for _, r := range results {
+		if convertSlug != "" && !strings.Contains(strings.ToLower(r.Slug), strings.ToLower(convertSlug)) {
+			continue
+		}
+		if convertMinCVSS > 0 && r.CVSS < convertMinCVSS {
+			continue
+		}
+		if convertMaxCVSS > 0 && r.CVSS > convertMaxCVSS {
+			continue
+		}
+		if convertCVE != "" && !strings.Contains(strings.ToUpper(r.CVE), strings.ToUpper(convertCVE)) {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+	return filtered
+}
 
-// convertSummary prints a summary line for convert results.
-func convertSummary(total, vulnCount int) string {
-	return fmt.Sprintf("%s results: %s vulnerable, %s safe",
-		strconv.Itoa(total),
-		strconv.Itoa(vulnCount),
-		strconv.Itoa(total-vulnCount),
-	)
+// countUniqueVulnSlugs returns the number of distinct slugs in flat vuln results.
+func countUniqueVulnSlugs(results []flatVuln) int {
+	seen := make(map[string]bool)
+	for _, r := range results {
+		seen[r.Slug] = true
+	}
+	return len(seen)
 }

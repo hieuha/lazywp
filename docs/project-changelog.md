@@ -2,6 +2,14 @@
 
 All notable changes to lazywp are documented here.
 
+## [0.7.4] - 2026-03-14
+
+### Added
+- `vuln --output` (`-o`) flag — write results to file (matches `scan` and `exploit` commands)
+- `vuln --detail` with `--format csv/json` now outputs one row per CVE with full info (slug, CVE, CVSS, type, title, affected versions, fixed in, source) instead of aggregated plugin summary
+- `convert` auto-detects input format — now supports both `scan` and `vuln` JSON files
+- `convert` vuln JSON supports `--slug`, `--min-cvss`, `--max-cvss`, `--cve` filters
+
 ## [0.7.3] - 2026-03-14
 
 ### Fixed

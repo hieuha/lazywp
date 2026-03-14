@@ -108,6 +108,8 @@ lazywp vuln --top 10 --cwe-type xss --download
 # Output formats
 lazywp vuln --slug akismet -f json
 lazywp vuln --top 5 --detail -f json
+lazywp vuln --top 10 --cwe-type sqli --detail -f json -o vuln.json
+lazywp vuln --top 10 --detail -f csv -o top10.csv
 ```
 
 ### Scan Local Directory
@@ -152,31 +154,23 @@ lazywp exploit --file scan.json -f csv  -o exploits.csv
 | `--has-nuclei` | Show only CVEs with a Nuclei template |
 | `-o` | Write output to file (default: stdout) |
 
-### Convert / Re-export Scan Results
+### Convert / Re-export Scan & Vuln Results
 
-Read a `lazywp scan -f json` output file, apply filters, and re-export in any format.
+Read a JSON file from `lazywp scan` or `lazywp vuln` and re-export with filters. Auto-detects input format.
 
 ```bash
-# Table view with details
-lazywp convert scan.json -f table --detail
-
-# Export to CSV
+# Scan JSON
 lazywp convert scan.json -f csv -o report.csv
-
-# Filter by plugin slug
 lazywp convert scan.json --slug elementor --detail
-
-# Filter by vulnerability properties
 lazywp convert scan.json --vuln-only --min-cvss 7.0
-lazywp convert scan.json --max-cvss 5.9 --safe-only
-
-# Filter by specific CVE
-lazywp convert scan.json --cve CVE-2024-1234
-
-# Filter to exploitable only (has PoC, KEV, or Nuclei)
 lazywp convert scan.json --exploitable -f csv -o critical.csv
 
-# Filter by status
+# Vuln JSON (from lazywp vuln --detail -f json)
+lazywp convert vuln.json -f csv -o all-cves.csv
+lazywp convert vuln.json --slug contact-form --min-cvss 9.0
+lazywp convert vuln.json --cve CVE-2024-1234 -f json
+
+# Filter by status (scan JSON only)
 lazywp convert scan.json --status vulnerable -f csv -o vulnerable.csv
 ```
 
