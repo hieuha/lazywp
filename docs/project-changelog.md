@@ -2,6 +2,14 @@
 
 All notable changes to lazywp are documented here.
 
+## [0.7.5] - 2026-03-14
+
+### Fixed
+- `scan` now detects versions in `lazywp extract` layout (`slug/version/slug/`), previously showed all as `@unknown`
+
+### Added
+- Typed JSON envelope (`{"type": "scan"|"vuln", "data": [...]}`) for reliable format auto-detection in `convert`
+
 ## [0.7.4] - 2026-03-14
 
 ### Added
