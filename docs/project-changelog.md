@@ -2,6 +2,11 @@
 
 All notable changes to lazywp are documented here.
 
+## [0.7.2] - 2026-03-14
+
+### Fixed
+- `.gitignore` pattern `lazywp` matched `cmd/lazywp/` directory, preventing it from being tracked — changed to `/lazywp`
+
 ## [0.7.1] - 2026-03-14
 
 ### Added
