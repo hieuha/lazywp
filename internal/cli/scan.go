@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ var (
 	scanSource  string
 	scanNoCache bool
 	scanDetail  bool
+	scanOutput  string
 )
 
 var scanCmd = &cobra.Command{
@@ -39,6 +41,7 @@ func init() {
 	scanCmd.Flags().StringVar(&scanSource, "source", "all", "Vulnerability source: wpscan|nvd|wordfence|all")
 	scanCmd.Flags().BoolVar(&scanNoCache, "no-cache", false, "Skip cache, force fresh API lookups (results still cached)")
 	scanCmd.Flags().BoolVar(&scanDetail, "detail", false, "Show detailed CVE list for vulnerable items")
+	scanCmd.Flags().StringVarP(&scanOutput, "output", "o", "", "Write results to file (default: stdout)")
 	rootCmd.AddCommand(scanCmd)
 }
 
@@ -110,11 +113,29 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return vulnerable[i].MaxCVSS > vulnerable[j].MaxCVSS
 	})
 
-	if outputFmt != "table" {
-		fmtr.Print(nil, nil, results)
+	// Build output formatter (file or stdout)
+	outFmtr := fmtr
+	if scanOutput != "" {
+		f, err := os.Create(scanOutput)
+		if err != nil {
+			return fmt.Errorf("create output file: %w", err)
+		}
+		defer f.Close()
+		outFmtr = NewFormatter(outputFmt, f)
+	}
+
+	if outputFmt == "csv" {
+		headers, rows := flattenScanResults(append(vulnerable, safe...))
+		outFmtr.CSV(headers, rows)
 		return nil
 	}
 
+	if outputFmt == "json" {
+		outFmtr.JSON(results)
+		return nil
+	}
+
+	// Table format (always to stdout)
 	printScanTable(vulnerable, safe)
 	printScanSummary(len(plugins), len(vulnerable), len(safe))
 
@@ -286,4 +307,47 @@ func printScanSummary(total, vulnCount, safeCount int) {
 		strconv.Itoa(vulnCount),
 		strconv.Itoa(safeCount),
 	)
+}
+
+// flattenScanResults converts scan results to CSV-friendly rows.
+// One row per CVE (vulnerable plugins expand to multiple rows).
+func flattenScanResults(results []ScanResult) ([]string, [][]string) {
+	headers := []string{"slug", "version", "status", "cve_count", "max_cvss", "update_to", "cve", "cvss", "type", "title", "fixed_in"}
+	var rows [][]string
+
+	for _, r := range results {
+		if len(r.Vulns) == 0 {
+			ver := r.Plugin.Version
+			if ver == "" {
+				ver = "unknown"
+			}
+			rows = append(rows, []string{
+				r.Plugin.Slug, ver, "safe",
+				"0", "0.0", "", "", "", "", "", "",
+			})
+			continue
+		}
+
+		for _, v := range r.Vulns {
+			fixed := v.FixedIn
+			if fixed == "" {
+				fixed = "unfixed"
+			}
+			rows = append(rows, []string{
+				r.Plugin.Slug,
+				r.Plugin.Version,
+				"vulnerable",
+				strconv.Itoa(r.ActiveVulns),
+				strconv.FormatFloat(r.MaxCVSS, 'f', 1, 64),
+				r.MaxFixedIn,
+				v.CVE,
+				strconv.FormatFloat(v.CVSS, 'f', 1, 64),
+				v.Type,
+				v.Title,
+				fixed,
+			})
+		}
+	}
+
+	return headers, rows
 }
