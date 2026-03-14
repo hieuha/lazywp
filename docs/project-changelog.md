@@ -2,6 +2,14 @@
 
 All notable changes to lazywp are documented here.
 
+## [0.7.3] - 2026-03-14
+
+### Fixed
+- `search` command required `--query` flag — now accepts positional arg (`lazywp search "security"`) with `--query` as fallback
+
+### Changed
+- Updated all docs: config format JSON → YAML, added missing packages (extractor, scanner, watch), fixed file references, removed outdated limitations
+
 ## [0.7.2] - 2026-03-14
 
 ### Fixed
