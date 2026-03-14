@@ -151,10 +151,26 @@ func (wf *WordfenceClient) SearchVulns(ctx context.Context, filters WordfenceFil
 
 // FetchVulnPlugins searches Wordfence for vulnerable plugins/themes grouped by slug,
 // returning the top N items sorted by vuln count and max CVSS.
+// Falls back to RSS feed if HTML scraping returns no results (JS-rendered pages).
 func (wf *WordfenceClient) FetchVulnPlugins(ctx context.Context, filters WordfenceFilters, limit int) ([]VulnerableItem, error) {
 	wfVulns, err := wf.SearchVulns(ctx, filters)
 	if err != nil {
 		return nil, err
+	}
+
+	// Wordfence search pages are JS-rendered; fall back to RSS feed
+	if len(wfVulns) == 0 {
+		rssVulns, rssErr := wf.FetchRecent(ctx, 100)
+		if rssErr != nil {
+			return nil, fmt.Errorf("wordfence: RSS fallback: %w", rssErr)
+		}
+		for _, v := range rssVulns {
+			wfVulns = append(wfVulns, WordfenceVuln{
+				CVE:   v.CVE,
+				Title: v.Title,
+				CVSS:  v.CVSS,
+			})
+		}
 	}
 
 	bySlug := make(map[string]*VulnerableItem)
