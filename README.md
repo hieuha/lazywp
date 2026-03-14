@@ -72,8 +72,9 @@ lazywp download --list plugins.txt
 
 ```bash
 lazywp extract                              # extract all downloaded plugins
-lazywp extract --slug akismet               # extract specific plugin
-lazywp extract --list slugs.txt             # extract from list
+lazywp extract --slug akismet               # all versions of akismet
+lazywp extract --slug akismet:5.0.1         # only akismet v5.0.1
+lazywp extract --list slugs.txt             # from list (slug or slug:version)
 lazywp extract --source-dir ./my-downloads  # custom downloads directory
 lazywp extract --output-dir ./sast-target   # custom output dir
 lazywp extract --clean                      # clean before extracting
@@ -82,8 +83,8 @@ lazywp extract -t theme                     # extract themes
 
 | Flag | Description |
 |------|-------------|
-| `--slug` | Extract a specific plugin/theme by slug |
-| `--list` | File with slugs to extract (one per line) |
+| `--slug` | Plugin/theme slug (`slug` or `slug:version`) |
+| `--list` | File with slugs (one per line, `slug:version` supported) |
 | `--source-dir` | Source downloads directory (default: config `output_dir`) |
 | `--output-dir` | Output directory (default: `./extracted`) |
 | `--clean` | Remove existing extracted files before extracting |

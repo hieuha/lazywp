@@ -2,6 +2,18 @@
 
 All notable changes to lazywp are documented here.
 
+## [0.7.1] - 2026-03-14
+
+### Added
+- `extract --slug slug:version` syntax for extracting specific versions
+- `extract --source-dir` flag for custom downloads directory
+- `extract --list` supports `slug:version` per line
+
+### Fixed
+- `download --force` flag was not passed to engine (always skipped existing)
+- `download` now shows "Already exists: slug@version" instead of silent "Done"
+- `download` shows resolved version in "Downloading..." and "Done" messages
+
 ## [0.7.0] - 2026-03-14
 
 ### Added
