@@ -11,6 +11,7 @@ import (
 
 	"github.com/hieuha/lazywp/internal/client"
 	"github.com/hieuha/lazywp/internal/downloader"
+	"github.com/hieuha/lazywp/internal/scanner"
 	"github.com/hieuha/lazywp/internal/storage"
 	"github.com/spf13/cobra"
 )
@@ -159,7 +160,8 @@ func runVulnBySlug(ctx context.Context) error {
 
 	if vulnDownload {
 		ctx2 := context.Background()
-		jobs := []downloader.DownloadJob{{Slug: vulnSlug, ItemType: appDeps.ItemType, Force: forceDown}}
+		ver := maxAffectedVersion(vulns)
+		jobs := []downloader.DownloadJob{{Slug: vulnSlug, Version: ver, ItemType: appDeps.ItemType, Force: forceDown}}
 		result := appDeps.Engine.DownloadBatch(ctx2, jobs)
 		printBatchResult(result)
 	}
@@ -255,7 +257,8 @@ func runVulnTop(ctx context.Context) error {
 	if vulnDownload {
 		jobs := make([]downloader.DownloadJob, len(items))
 		for i, it := range items {
-			jobs[i] = downloader.DownloadJob{Slug: it.Slug, ItemType: appDeps.ItemType, Force: forceDown}
+			ver := maxAffectedVersion(it.Vulns)
+			jobs[i] = downloader.DownloadJob{Slug: it.Slug, Version: ver, ItemType: appDeps.ItemType, Force: forceDown}
 		}
 		result := appDeps.Engine.DownloadBatch(ctx, jobs)
 		printBatchResult(result)
@@ -347,9 +350,17 @@ func runVulnBatch(ctx context.Context) error {
 	}
 
 	if vulnDownload && len(downloadSlugs) > 0 {
+		// Build slug→vulns map for affected version lookup
+		vulnMap := make(map[string][]storage.Vulnerability)
+		for _, r := range allResults {
+			if len(r.Vulns) > 0 {
+				vulnMap[r.Slug] = r.Vulns
+			}
+		}
 		jobs := make([]downloader.DownloadJob, len(downloadSlugs))
 		for i, s := range downloadSlugs {
-			jobs[i] = downloader.DownloadJob{Slug: s, ItemType: appDeps.ItemType, Force: forceDown}
+			ver := maxAffectedVersion(vulnMap[s])
+			jobs[i] = downloader.DownloadJob{Slug: s, Version: ver, ItemType: appDeps.ItemType, Force: forceDown}
 		}
 		result := appDeps.Engine.DownloadBatch(ctx, jobs)
 		printBatchResult(result)
@@ -410,6 +421,42 @@ func flattenVulnRows(flat []flatVuln) ([]string, [][]string) {
 		}
 	}
 	return headers, rows
+}
+
+// maxAffectedVersion extracts the highest affected version from vulnerability data.
+// Parses "* - X.Y.Z" or "X.Y.Z - X.Y.Z" format and returns the upper bound.
+// Returns empty string if no parseable version is found (falls back to latest).
+func maxAffectedVersion(vulns []storage.Vulnerability) string {
+	var best string
+	for _, v := range vulns {
+		ver := parseUpperBound(v.AffectedVersions)
+		if ver == "" {
+			continue
+		}
+		if best == "" || scanner.CompareVersions(ver, best) > 0 {
+			best = ver
+		}
+	}
+	return best
+}
+
+// parseUpperBound extracts the upper version from an affected range string.
+// Handles formats like "* - 5.6.3", "1.0 - 5.6.3", "5.6.3".
+func parseUpperBound(affected string) string {
+	affected = strings.TrimSpace(affected)
+	if affected == "" || affected == "*" {
+		return ""
+	}
+	// "X - Y" format: take Y
+	if idx := strings.LastIndex(affected, " - "); idx >= 0 {
+		v := strings.TrimSpace(affected[idx+3:])
+		if v != "*" && v != "" {
+			return v
+		}
+		return ""
+	}
+	// Single version
+	return affected
 }
 
 // readSlugListFile reads a file of slugs (one per line, # comments allowed).
