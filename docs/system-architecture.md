@@ -7,14 +7,17 @@ github.com/hieuha/lazywp/
 ├── cmd/lazywp/
 │   └── main.go              # Entry point
 ├── internal/
-│   ├── cli/                 # Command handlers
+│   ├── cli/                 # Command handlers (23 files)
 │   ├── client/              # API clients for external services
 │   ├── config/              # Configuration management
 │   ├── downloader/          # Download orchestration
-│   ├── exploit/             # vulnx integration (CVEInfo, LookupCVEs)
+│   ├── exploit/             # vulnx/cvemap integration
+│   ├── extractor/           # Zip extraction for SAST
 │   ├── http/                # HTTP client with rate limiting
+│   ├── scanner/             # Local directory scanning
 │   ├── storage/             # File and metadata persistence
-│   └── vuln/                # Vulnerability aggregation
+│   ├── vuln/                # Vulnerability aggregation
+│   └── watch/               # Watch state management
 ```
 
 ## Component Descriptions
@@ -36,7 +39,13 @@ github.com/hieuha/lazywp/
 - `scan_progress.go` - Progress bar helpers shared by scan and exploit commands
 - `scan_exploit_enrichment.go` - Batch enrichment of scan results via vulnx
 - `exploit.go` - Standalone exploit/PoC lookup (`lazywp exploit [CVE...] [--file] [--has-poc]`)
+- `extract.go` - Extract downloaded zips for SAST analysis
+- `cache_cmd.go` - Cache management (status, update, clear)
 - `convert.go` - Re-read scan JSON, filter, re-export (`lazywp convert`)
+- `report.go` - Generate HTML vulnerability report from scan JSON
+- `report_template.go` - HTML template for report generation
+- `sarif.go` - SARIF v2.1.0 output format for GitHub Code Scanning
+- `watch.go` - Monitor plugins/themes for new versions and CVEs
 - `list.go` - List downloaded items
 - `search.go` - Search WordPress.org
 - `stats.go` - Display download statistics
@@ -48,12 +57,12 @@ github.com/hieuha/lazywp/
 - `deps.go` - Dependency injection for services
 
 ### internal/exploit
-**Responsibility:** Wrap ProjectDiscovery's vulnx CLI for CVE exploit metadata.
+**Responsibility:** Wrap ProjectDiscovery's vulnx/cvemap CLI for CVE exploit metadata.
 
 **Key Files:**
-- Provides `CVEInfo` struct (CVEID, CVSS, Severity, HasPOC, POCCount, POCURLs, IsKEV, EPSS, HasNuclei, NucleiURL)
-- `CheckAvailable()` - verifies vulnx is installed
-- `LookupCVEs(ids, apiKey, onProgress)` - batched lookups (10 CVEs/batch, 3s inter-batch delay, rate-limit retry)
+- `cvemap.go` - Provides `CVEInfo` struct (CVEID, CVSS, Severity, HasPOC, POCCount, POCURLs, IsKEV, EPSS, HasNuclei, NucleiURL)
+  - `CheckAvailable()` - verifies cvemap is installed
+  - `LookupCVEs(ids, apiKey, onProgress)` - batched lookups (10 CVEs/batch, 3s inter-batch delay, rate-limit retry)
 
 **Output Formats:**
 - Table (human-readable)
@@ -76,7 +85,25 @@ github.com/hieuha/lazywp/
 **Key Files:**
 - `config.go` - Config struct, load/save, default values
 
-**Configuration Path:** `~/.lazywp/config.json`
+**Configuration Path:** `./config.yaml` (in current working directory)
+
+**Default Configuration:**
+```yaml
+key_rotation: round-robin          # API key rotation strategy
+proxy_strategy: round-robin        # Proxy rotation strategy
+concurrency: 5                      # Concurrent downloads
+output_dir: ./downloads            # Download destination
+cache_dir: ./cache                 # Cache directory
+rate_limits:                        # Per-domain request rates (req/sec)
+  api.wordpress.org: 5
+  wpscan.com: 1
+  services.nvd.nist.gov: 0.16
+  www.wordfence.com: 0.1
+cache_ttl: 24h                      # Vulnerability cache duration
+retry_max: 3                        # Maximum retry attempts
+retry_base_delay: 1s               # Initial retry delay
+title_max_len: 100                 # Max title length in display
+```
 
 ### internal/downloader
 **Responsibility:** Orchestrate concurrent downloads with resume support.
@@ -94,6 +121,55 @@ github.com/hieuha/lazywp/
 5. Store metadata.json
 6. Update index.json
 7. On failure: record in errors.json, support resume
+
+### internal/extractor
+**Responsibility:** Safe zip extraction with protection against path traversal and zip bombs.
+
+**Key Files:**
+- `extractor.go` - Extract zips into destination directory
+  - Validates against zip-slip path traversal attacks
+  - Enforces 500MB safety limit per archive
+  - Creates directory structure and preserves permissions
+
+**Process:**
+1. Open zip file for reading
+2. Validate each file path (no parent directory references)
+3. Check total extracted size against limit
+4. Extract files to destination with proper permissions
+5. Return error if safety checks fail
+
+### internal/scanner
+**Responsibility:** Detect WordPress plugins and themes from local directory structure.
+
+**Key Files:**
+- `scanner.go` - Scan directories and detect items
+  - `ScanDirectory(dir, itemType)` - Walk directory tree, find plugins/themes
+  - Version detection strategy:
+    - **Plugin**: readme.txt "Stable tag" → PHP file "Version:" header
+    - **Theme**: style.css "Version:" header → readme.txt "Stable tag"
+- `version.go` - Version extraction helpers
+  - Parse readme.txt for stable tag
+  - Extract Version from PHP/CSS headers using regex patterns
+
+**Output:**
+- `ScannedPlugin` struct with: Slug, Version, Path
+
+### internal/watch
+**Responsibility:** Track plugin/theme versions and CVEs for continuous monitoring.
+
+**Key Files:**
+- `state.go` - Watch baseline state management
+  - `WatchState` - Map of slug → version/CVE history
+  - `SlugState` - Per-item tracking (Version, CVEs, LastCheck timestamp)
+  - `Change` - Detected differences (new_version, new_cve)
+  - Load/save state from JSON file for persistence
+
+**Process:**
+1. Load baseline state from watch file (if exists)
+2. Check current versions and CVEs
+3. Detect changes (version bump, new CVE)
+4. Report changes to user
+5. Update and persist state for next run
 
 ### internal/http
 **Responsibility:** HTTP communication with rate limiting, key rotation, and proxy support.
@@ -225,6 +301,58 @@ User → CLI (list/export) → Storage Manager (read index.json)
                               stdout
 ```
 
+### Extract Flow
+```
+User → CLI (extract) → Extractor
+                           ↓
+                      Validate path safety (zip-slip)
+                           ↓
+                      Check size limits (500MB)
+                           ↓
+                      Extract files
+                           ↓
+                      Destination directory
+```
+
+### Report Flow
+```
+User → CLI (report) → Storage Manager (read scan results)
+                           ↓
+                      Report formatter
+                           ↓
+                      HTML template rendering
+                           ↓
+                      Output HTML report
+```
+
+### Watch Flow
+```
+User → CLI (watch) → Scanner (detect current versions)
+                           ↓
+                      VulnAggregator (fetch CVEs)
+                           ↓
+                      Compare with state file
+                           ↓
+                      Detect changes (new_version, new_cve)
+                           ↓
+                      Report changes + Update state
+```
+
+### Scan Flow (with optional exploit enrichment)
+```
+User → CLI (scan) → Scanner (detect local items)
+                           ↓
+                      Store results (JSON)
+                           ↓
+                      [Optional] Enrichment via vulnx
+                           ↓
+                      VulnAggregator (parallel sources)
+                           ↓
+                      Merge and cache
+                           ↓
+                      Output formatted results
+```
+
 ## Rate Limiting Strategy
 
 **Token Bucket Algorithm per domain:**
@@ -233,6 +361,7 @@ User → CLI (list/export) → Storage Manager (read index.json)
   - api.wordpress.org: 5 req/sec
   - wpscan.com: 1 req/sec
   - services.nvd.nist.gov: 0.16 req/sec
+  - www.wordfence.com: 0.1 req/sec
 - Blocks requests until tokens available
 - Prevents API throttling and bans
 
@@ -268,7 +397,7 @@ User → CLI (list/export) → Storage Manager (read index.json)
 
 **Load:**
 1. Default config created
-2. User-provided config path or default (~/.lazywp/config.json) loaded
+2. User-provided config path or default (./config.yaml) loaded
 3. Merged with defaults
 4. Validated before use
 

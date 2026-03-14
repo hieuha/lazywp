@@ -4,6 +4,7 @@ A high-performance Go CLI tool for bulk downloading WordPress plugins/themes wit
 
 **Module:** github.com/hieuha/lazywp
 **Language:** Go 1.25.0
+**Version:** 0.7.2
 **Last Updated:** 2026-03-14
 
 ## Quick Navigation
@@ -11,14 +12,17 @@ A high-performance Go CLI tool for bulk downloading WordPress plugins/themes wit
 | Package | Purpose | Key Files |
 |---|---|---|
 | cmd/lazywp | Application entry point | main.go |
-| internal/cli | Command handlers | root.go, download.go, vuln.go, scan.go, exploit.go, convert.go, list.go, search.go, stats.go, top.go, export.go, config_cmd.go, version.go, formatter.go, deps.go, scan_progress.go, scan_exploit_enrichment.go |
+| internal/cli | Command handlers | root.go, download.go, vuln.go, scan.go, exploit.go, convert.go, list.go, search.go, stats.go, top.go, export.go, config_cmd.go, version.go, formatter.go, deps.go, scan_progress.go, scan_exploit_enrichment.go, cache_cmd.go, extract.go, report.go, report_template.go, sarif.go, watch.go |
 | internal/client | External API clients | wordpress.go, wpscan.go, nvd.go, wordfence.go, types.go |
 | internal/config | Configuration management | config.go |
 | internal/downloader | Download orchestration | engine.go, progress.go, resume.go |
-| internal/exploit | vulnx integration | lookup.go (CVEInfo, LookupCVEs, CheckAvailable) |
+| internal/exploit | vulnx integration | cvemap.go |
+| internal/extractor | ZIP extraction | extractor.go |
 | internal/http | HTTP utilities | client.go, ratelimit.go, key_rotator.go, proxy.go |
+| internal/scanner | Local directory scanning | scanner.go, version.go |
 | internal/storage | File persistence | manager.go, models.go, item_type.go |
 | internal/vuln | Vulnerability aggregation | aggregator.go, cache.go |
+| internal/watch | Watch state management | state.go |
 
 ## Package Details
 
@@ -29,7 +33,7 @@ A high-performance Go CLI tool for bulk downloading WordPress plugins/themes wit
 
 ### internal/cli
 **Responsibility:** Command parsing, validation, and output formatting.
-**Files:** 19 files, ~1 400 LOC (excluding tests)
+**Files:** 23 files, ~1 600 LOC (excluding tests)
 
 | File | Purpose |
 |---|---|
@@ -48,8 +52,14 @@ A high-performance Go CLI tool for bulk downloading WordPress plugins/themes wit
 | `export.go` | Export data in JSON/CSV formats |
 | `config_cmd.go` | Config management (show, set) |
 | `version.go` | Display CLI version |
-| `formatter.go` | Output formatting (table, JSON, CSV) with pretty-printing |
+| `formatter.go` | Output formatting (table, JSON, CSV, SARIF) with pretty-printing |
 | `deps.go` | Dependency injection, builds AppDeps struct |
+| `cache_cmd.go` | Cache management commands (list, clear, cleanup) |
+| `extract.go` | Extract plugin/theme archives with zip-slip protection |
+| `report.go` | Generate vulnerability reports from scan results |
+| `report_template.go` | HTML/Markdown report templates for rendering |
+| `sarif.go` | SARIF format output for security scanning |
+| `watch.go` | Watch local directories for WordPress changes |
 
 **Key Interfaces:**
 - Formatter - abstracts output formatting
@@ -74,32 +84,63 @@ A high-performance Go CLI tool for bulk downloading WordPress plugins/themes wit
 **Data Flow:** CLI → Client → HTTP Client → External API → Response parsing
 
 ### internal/config
-**Responsibility:** Application configuration management.
+**Responsibility:** Application configuration management (YAML format).
 **Files:** 1 file, ~100 LOC (excluding tests)
 
 **Key Functions:**
-- `Load(path string)` - Load config from JSON file
-- `Save(path string)` - Save config to JSON file
+- `Load(path string)` - Load config from YAML file
+- `Save(path string)` - Save config to YAML file
 - `DefaultConfig()` - Create config with sensible defaults
 - `CacheTTLDuration()` - Parse cache TTL string to duration
 - `RetryBaseDelayDuration()` - Parse retry delay string to duration
 
-**Config Location:** `~/.lazywp/config.json`
+**Config Location:** `./config.yaml`
+
+**Config Struct (YAML tags):**
+```go
+type Config struct {
+    WPScanKeys        []string           `yaml:"wpscan_keys,omitempty"`
+    WordfenceKeys     []string           `yaml:"wordfence_keys,omitempty"`
+    NVDKeys           []string           `yaml:"nvd_keys,omitempty"`
+    KeyRotation       string             `yaml:"key_rotation"`
+    Proxies           []string           `yaml:"proxies,omitempty"`
+    ProxyStrategy     string             `yaml:"proxy_strategy"`
+    Concurrency       int                `yaml:"concurrency"`
+    OutputDir         string             `yaml:"output_dir"`
+    CacheDir          string             `yaml:"cache_dir"`
+    RateLimits        map[string]float64 `yaml:"rate_limits"`
+    CacheTTL          string             `yaml:"cache_ttl"`
+    RetryMax          int                `yaml:"retry_max"`
+    RetryBaseDelay    string             `yaml:"retry_base_delay"`
+    TitleMaxLen       int                `yaml:"title_max_len"`
+    PDAPIKey          string             `yaml:"projectdiscovery_api_key,omitempty"`
+    PDAPIKeys         []string           `yaml:"projectdiscovery_api_keys,omitempty"`
+}
+```
 
 **Example Config:**
-```json
-{
-  "wpscan_keys": ["key1", "key2"],
-  "nvd_key": "your-nvd-key",
-  "key_rotation": "round-robin",
-  "proxy_strategy": "round-robin",
-  "concurrency": 5,
-  "output_dir": "./downloads",
-  "rate_limits": {"api.wordpress.org": 5, "wpscan.com": 1, "services.nvd.nist.gov": 0.16},
-  "cache_ttl": "24h",
-  "retry_max": 3,
-  "retry_base_delay": "1s"
-}
+```yaml
+wpscan_keys:
+  - key1
+  - key2
+wordfence_keys:
+  - wordfence-key
+nvd_keys:
+  - nvd-key
+key_rotation: round-robin
+proxy_strategy: round-robin
+concurrency: 5
+output_dir: ./downloads
+cache_dir: ./cache
+rate_limits:
+  api.wordpress.org: 5
+  wpscan.com: 1
+  services.nvd.nist.gov: 0.16
+cache_ttl: 24h
+retry_max: 3
+retry_base_delay: 1s
+title_max_len: 100
+projectdiscovery_api_key: your-pd-key
 ```
 
 ### internal/downloader
@@ -201,6 +242,26 @@ downloads/
 └── errors.json
 ```
 
+### internal/extractor
+**Responsibility:** ZIP archive extraction with zip-slip protection.
+**Files:** 1 file, ~150 LOC (excluding tests)
+
+| File | Purpose |
+|---|---|
+| `extractor.go` | SafeExtract validates paths, prevents directory traversal attacks |
+
+**Key Functions:**
+- `SafeExtract(zipPath, destDir string)` - Extract ZIP with security validation
+
+### internal/scanner
+**Responsibility:** Local directory scanning and WordPress version detection.
+**Files:** 2 files, ~250 LOC (excluding tests)
+
+| File | Purpose |
+|---|---|
+| `scanner.go` | Scan directories for WordPress plugins/themes, extract metadata |
+| `version.go` | Detect WordPress core version from wp-includes |
+
 ### internal/vuln
 **Responsibility:** Aggregate vulnerability data from multiple sources.
 **Files:** 2 files, ~200 LOC (excluding tests)
@@ -209,6 +270,14 @@ downloads/
 |---|---|
 | `aggregator.go` | VulnAggregator queries all sources in parallel |
 | `cache.go` | Caches vulnerability results with TTL |
+
+### internal/watch
+**Responsibility:** Watch state management for directory monitoring.
+**Files:** 1 file, ~100 LOC
+
+| File | Purpose |
+|---|---|
+| `state.go` | Tracks watched directories and change state |
 
 **VulnAggregator Process:**
 1. Accept list of VulnSource implementations
@@ -272,8 +341,11 @@ All services receive dependencies via constructors, no global singletons.
 
 Test files present for:
 - internal/config/ - config_test.go
-- internal/downloader/ - resume_test.go, engine_test.go, progress_test.go
-- internal/storage/ - manager_test.go, models_test.go
+- internal/downloader/ - resume_test.go
+- internal/extractor/ - extractor_test.go
+- internal/http/ - key_rotator_test.go, proxy_test.go, ratelimit_test.go
+- internal/scanner/ - scanner_test.go, version_test.go
+- internal/storage/ - manager_test.go
 - internal/vuln/ - aggregator_test.go, cache_test.go
 
 **Testing Approach:** Table-driven tests for multiple scenarios
@@ -285,6 +357,7 @@ Test files present for:
 | github.com/spf13/cobra | v1.10.2 | CLI framework |
 | github.com/schollz/progressbar/v3 | v3.19.0 | Progress visualization |
 | golang.org/x/time | v0.15.0 | Rate limiting (token bucket) |
+| gopkg.in/yaml.v3 | v3.0.1 | YAML configuration parsing |
 
 ## Performance Characteristics
 
@@ -298,8 +371,9 @@ Test files present for:
 
 ## Security Considerations
 
-- API keys stored in `~/.lazywp/config.json` (user responsible for file permissions)
+- API keys stored in `./config.yaml` (user responsible for file permissions)
 - SHA256 verification of all downloads
+- Zip-slip protection in archive extraction
 - TLS for all external API communication
 - No credentials logged (unless verbose mode)
 - Proxy support for privacy-sensitive environments
@@ -308,18 +382,22 @@ Test files present for:
 
 1. **CLI Entry:** cmd/lazywp/main.go → internal/cli.Execute()
 2. **Commands:**
-   - `lazywp download {plugin|theme} <slugs>...`
-   - `lazywp vuln check {plugin|theme} <slug>`
-   - `lazywp scan <dir> [-t plugin|theme] [--check-exploit]`
-   - `lazywp exploit [CVE-ID...] [--file scan.json] [--has-poc] [--has-nuclei]`
-   - `lazywp convert <scan.json> [--vuln-only] [--min-cvss N] [--exploitable] [-f csv]`
-   - `lazywp list [plugin|theme]`
-   - `lazywp search {plugin|theme} <query>`
-   - `lazywp stats`
-   - `lazywp top {plugin|theme}`
-   - `lazywp export {plugin|theme}`
-   - `lazywp config {show|set <key> <value>}`
-   - `lazywp version`
+   - `lazywp download {plugin|theme} <slugs>...` - Batch download plugins/themes
+   - `lazywp vuln check {plugin|theme} <slug>` - Check vulnerabilities for single item
+   - `lazywp scan <dir> [-t plugin|theme] [--check-exploit]` - Scan local directory
+   - `lazywp exploit [CVE-ID...] [--file scan.json] [--has-poc] [--has-nuclei]` - Lookup exploits
+   - `lazywp convert <scan.json> [--vuln-only] [--min-cvss N] [--exploitable] [-f csv]` - Re-export scan results
+   - `lazywp extract <path/to/file.zip> [-d <dest>]` - Extract plugin/theme archives
+   - `lazywp report <scan.json> [-f html|markdown|json]` - Generate vulnerability reports
+   - `lazywp cache {list|clear|cleanup}` - Manage cached data
+   - `lazywp watch <dir> [--daemon]` - Monitor directory for WordPress changes
+   - `lazywp list [plugin|theme]` - List downloaded items
+   - `lazywp search {plugin|theme} <query>` - Search WordPress.org
+   - `lazywp stats` - Display download statistics
+   - `lazywp top {plugin|theme}` - Show popular extensions
+   - `lazywp export {plugin|theme}` - Export metadata
+   - `lazywp config {show|set <key> <value>}` - Manage configuration
+   - `lazywp version` - Display CLI version
 
 ## Build & Deployment
 
@@ -335,12 +413,13 @@ Test files present for:
 | Retry max | 3 | 1-N |
 | Retry base delay | 1s | Any duration |
 | Output dir | ./downloads | Any path |
-| Output format | table | table/json/csv |
+| Cache dir | ./cache | Any path |
+| Output format | table | table/json/csv/sarif |
+| Title max length | 100 | 1-N |
 
 ## Known Limitations
 
 - Single-threaded CLI (each command runs once)
-- No built-in scheduler for periodic updates
-- No daemon mode
 - Configuration requires manual file editing (except `config set` commands)
 - No multi-user access control
+- Watch mode requires manual restart on major changes

@@ -68,9 +68,13 @@ import "github.com/hieuha/lazywp/internal/cli"
 │   ├── client/              # external service clients
 │   ├── config/              # configuration
 │   ├── downloader/          # download orchestration
+│   ├── exploit/             # exploit integration
+│   ├── extractor/           # content extraction utilities
 │   ├── http/                # HTTP utilities
+│   ├── scanner/             # scanning orchestration
 │   ├── storage/             # persistence
-│   └── vuln/                # vulnerability aggregation
+│   ├── vuln/                # vulnerability aggregation
+│   └── watch/               # file watching and monitoring
 └── docs/                    # documentation
 ```
 
@@ -184,28 +188,35 @@ func TestDownloadEngine_DownloadOne(t *testing.T) {
 
 ## Configuration Management
 
-**Config File:** `~/.lazywp/config.json`
+**Config File:** `./config.yaml`
+
+**Format:** YAML
 
 **Structure:**
 ```go
 type Config struct {
-    WPScanKeys     []string           `json:"wpscan_keys"`
-    NVDKey         string             `json:"nvd_key"`
-    KeyRotation    string             `json:"key_rotation"`
-    Proxies        []string           `json:"proxies"`
-    ProxyStrategy  string             `json:"proxy_strategy"`
-    Concurrency    int                `json:"concurrency"`
-    OutputDir      string             `json:"output_dir"`
-    RateLimits     map[string]float64 `json:"rate_limits"`
-    CacheTTL       string             `json:"cache_ttl"`
-    RetryMax       int                `json:"retry_max"`
-    RetryBaseDelay string             `json:"retry_base_delay"`
+    WPScanKeys             []string           `yaml:"wpscan_keys,omitempty"`
+    WordfenceKeys          []string           `yaml:"wordfence_keys,omitempty"`
+    NVDKeys                []string           `yaml:"nvd_keys,omitempty"`
+    KeyRotation            string             `yaml:"key_rotation"`
+    Proxies                []string           `yaml:"proxies,omitempty"`
+    ProxyStrategy          string             `yaml:"proxy_strategy"`
+    Concurrency            int                `yaml:"concurrency"`
+    OutputDir              string             `yaml:"output_dir"`
+    CacheDir               string             `yaml:"cache_dir"`
+    RateLimits             map[string]float64 `yaml:"rate_limits"`
+    CacheTTL               string             `yaml:"cache_ttl"`
+    RetryMax               int                `yaml:"retry_max"`
+    RetryBaseDelay         string             `yaml:"retry_base_delay"`
+    TitleMaxLen            int                `yaml:"title_max_len"`
+    PDAPIKey               string             `yaml:"projectdiscovery_api_key,omitempty"`
+    PDAPIKeys              []string           `yaml:"projectdiscovery_api_keys,omitempty"`
 }
 ```
 
 **Loading:**
 1. Apply defaults from `DefaultConfig()`
-2. Load user config from file (if exists)
+2. Load user config from `./config.yaml` or from `--config` flag path
 3. Validate required fields
 
 ## Logging & Debugging
@@ -340,6 +351,7 @@ func (a *Aggregator) FetchForSlug(ctx context.Context, slug string) ([]Vuln, []s
 - `github.com/spf13/cobra` v1.10.2 - CLI framework
 - `github.com/schollz/progressbar/v3` v3.19.0 - Progress bars
 - `golang.org/x/time` v0.15.0 - Rate limiting
+- `gopkg.in/yaml.v3` v3.0.1 - YAML parsing and serialization
 
 **Constraint:** Minimize dependencies, prefer stdlib where reasonable
 

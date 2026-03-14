@@ -65,13 +65,17 @@ External APIs (WordPress.org, WPScan, NVD, Wordfence)
 
 | Component | Purpose | Files |
 |---|---|---|
-| CLI | Command handling and output formatting | internal/cli/ (12 files) |
+| CLI | Command handling and output formatting | internal/cli/ (23 files) |
 | Download Engine | Orchestrate parallel downloads | internal/downloader/ (3 files) |
 | HTTP Client | Rate limiting + key rotation + proxies | internal/http/ (4 files) |
 | Vulnerability Aggregator | Cross-reference CVE databases | internal/vuln/ (2 files) |
 | Storage Manager | File and metadata persistence | internal/storage/ (3 files) |
 | API Clients | External service integrations | internal/client/ (5 files) |
 | Config Manager | Configuration file handling | internal/config/ (1 file) |
+| Exploit Integration | Exploit database integration | internal/exploit/ |
+| Extractor | Content extraction utilities | internal/extractor/ |
+| Scanner | Scanning orchestration | internal/scanner/ |
+| Watch Manager | File watching and monitoring | internal/watch/ |
 
 ### Storage Structure
 
@@ -79,8 +83,7 @@ External APIs (WordPress.org, WPScan, NVD, Wordfence)
 downloads/
 ├── plugins/{slug}/{version}/
 │   ├── {slug}.zip
-│   ├── metadata.json
-│   └── .lazywp-state.json
+│   └── metadata.json
 ├── themes/{slug}/{version}/
 ├── index.json
 └── errors.json
@@ -88,11 +91,15 @@ downloads/
 
 ### Configuration
 
-Default location: `~/.lazywp/config.json`
+Default location: `./config.yaml`
+
+Format: YAML
 
 Key settings:
 - wpscan_keys: API keys for WPScan vulnerability database
-- nvd_key: API key for National Vulnerability Database
+- wordfence_keys: API keys for Wordfence threat intelligence
+- nvd_keys: API keys for National Vulnerability Database
+- projectdiscovery_api_keys: API keys for ProjectDiscovery services
 - concurrency: Number of parallel downloads (default: 5)
 - cache_ttl: Vulnerability data cache duration (default: 24h)
 - rate_limits: Per-domain request throttling
@@ -142,6 +149,7 @@ Key settings:
 - **Cobra** v1.10.2 — CLI framework
 - **progressbar** v3.19.0 — Progress visualization
 - **golang.org/x/time** v0.15.0 — Rate limiting
+- **yaml.v3** v3.0.1 — YAML parsing and serialization
 
 ## Testing
 
