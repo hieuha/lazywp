@@ -263,17 +263,12 @@ func colorCVSS(score float64) string {
 	}
 }
 
-// printScanTable renders the vulnerable/safe sections in table format with colors.
+// printScanTable renders vulnerable/safe sections with colors, then detail and summary.
 func printScanTable(vulnerable, safe []ScanResult) {
-	allResults := append(vulnerable, safe...)
-
-	for _, r := range allResults {
-		ver := r.Plugin.Version
-		if ver == "" {
-			ver = "unknown"
-		}
-
-		if r.IsVulnerable {
+	// Vulnerable section
+	if len(vulnerable) > 0 {
+		fmt.Printf("%sVULNERABLE (%d):%s\n", ansiBoldRed, len(vulnerable), ansiReset)
+		for _, r := range vulnerable {
 			cveLabel := "CVEs"
 			if r.ActiveVulns == 1 {
 				cveLabel = "CVE"
@@ -284,30 +279,40 @@ func printScanTable(vulnerable, safe []ScanResult) {
 			}
 			fmt.Printf("  %s%s%s@%s%s%s  %s%d%s %s (CVSS %s) → %s\n",
 				ansiBold, r.Plugin.Slug, ansiReset,
-				ansiBold, ver, ansiReset,
+				ansiBold, r.Plugin.Version, ansiReset,
 				ansiBold, r.ActiveVulns, ansiReset,
 				cveLabel,
 				colorCVSS(r.MaxCVSS),
 				updateHint,
 			)
-		} else {
-			fmt.Printf("  %s%s%s@%s  %s0 CVEs%s\n",
-				r.Plugin.Slug, ansiReset, ansiReset,
-				ver,
+		}
+		fmt.Println()
+	}
+
+	// Safe section
+	if len(safe) > 0 {
+		fmt.Printf("%sSAFE (%d):%s\n", ansiBoldGreen, len(safe), ansiReset)
+		for _, r := range safe {
+			ver := r.Plugin.Version
+			if ver == "" {
+				ver = "unknown"
+			}
+			fmt.Printf("  %s@%s  %s0 CVEs%s\n",
+				r.Plugin.Slug, ver,
 				ansiBoldGreen, ansiReset,
 			)
 		}
+		fmt.Println()
 	}
-	fmt.Println()
 
-	// Show detailed CVE list when --detail is used
+	// Detail: numbered CVE list per vulnerable plugin
 	if scanDetail && len(vulnerable) > 0 {
 		for _, r := range vulnerable {
 			fmt.Printf("--- %s%s%s@%s%s%s (%d CVEs, max CVSS %s) ---\n",
 				ansiBold, r.Plugin.Slug, ansiReset,
 				ansiBold, r.Plugin.Version, ansiReset,
 				r.ActiveVulns, colorCVSS(r.MaxCVSS))
-			for _, v := range r.Vulns {
+			for i, v := range r.Vulns {
 				cve := v.CVE
 				if cve == "" {
 					cve = "N/A"
@@ -316,7 +321,8 @@ func printScanTable(vulnerable, safe []ScanResult) {
 				if fixed == "" {
 					fixed = "unfixed"
 				}
-				fmt.Printf("  %-18s  CVSS:%s  %-8s  %s (fixed: %s)\n",
+				fmt.Printf("  #%-3d %-18s  CVSS:%s  %-8s  %s (fixed: %s)\n",
+					i+1,
 					cve,
 					colorCVSS(v.CVSS),
 					v.Type,
