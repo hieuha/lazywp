@@ -236,43 +236,77 @@ func isAPIKeyError(warning string) bool {
 		strings.Contains(lower, "http 403")
 }
 
-// printScanTable renders the vulnerable/safe sections in table format.
+// ANSI color/style codes for terminal output.
+const (
+	ansiReset     = "\033[0m"
+	ansiBold      = "\033[1m"
+	ansiRed       = "\033[31m"
+	ansiYellow    = "\033[33m"
+	ansiGreen     = "\033[32m"
+	ansiCyan      = "\033[36m"
+	ansiBoldRed   = "\033[1;31m"
+	ansiBoldGreen = "\033[1;32m"
+)
+
+// colorCVSS returns CVSS score string colored by severity level.
+func colorCVSS(score float64) string {
+	s := strconv.FormatFloat(score, 'f', 1, 64)
+	switch {
+	case score >= 9.0:
+		return ansiBoldRed + s + ansiReset // critical: bold red
+	case score >= 7.0:
+		return ansiRed + s + ansiReset // high: red
+	case score >= 4.0:
+		return ansiYellow + s + ansiReset // medium: yellow
+	default:
+		return ansiGreen + s + ansiReset // low: green
+	}
+}
+
+// printScanTable renders the vulnerable/safe sections in table format with colors.
 func printScanTable(vulnerable, safe []ScanResult) {
-	// Combine all results into a single table with header
 	allResults := append(vulnerable, safe...)
-	headers := []string{"Plugin", "Version", "Status", "CVEs", "Max CVSS", "Update To"}
-	rows := make([][]string, 0, len(allResults))
 
 	for _, r := range allResults {
 		ver := r.Plugin.Version
 		if ver == "" {
 			ver = "unknown"
 		}
-		status := "SAFE"
-		cves := "0"
-		maxCVSS := "-"
-		updateTo := "-"
-		if r.IsVulnerable {
-			status = "VULNERABLE"
-			cves = strconv.Itoa(r.ActiveVulns)
-			maxCVSS = strconv.FormatFloat(r.MaxCVSS, 'f', 1, 64)
-			if r.MaxFixedIn != "" {
-				updateTo = r.MaxFixedIn
-			} else {
-				updateTo = "no fix"
-			}
-		}
-		rows = append(rows, []string{r.Plugin.Slug, ver, status, cves, maxCVSS, updateTo})
-	}
 
-	fmtr.Table(headers, rows)
+		if r.IsVulnerable {
+			cveLabel := "CVEs"
+			if r.ActiveVulns == 1 {
+				cveLabel = "CVE"
+			}
+			updateHint := ansiRed + "no fix" + ansiReset
+			if r.MaxFixedIn != "" {
+				updateHint = "update to " + ansiCyan + r.MaxFixedIn + ansiReset
+			}
+			fmt.Printf("  %s%s%s@%s%s%s  %s%d%s %s (CVSS %s) → %s\n",
+				ansiBold, r.Plugin.Slug, ansiReset,
+				ansiBold, ver, ansiReset,
+				ansiBold, r.ActiveVulns, ansiReset,
+				cveLabel,
+				colorCVSS(r.MaxCVSS),
+				updateHint,
+			)
+		} else {
+			fmt.Printf("  %s%s%s@%s  %s0 CVEs%s\n",
+				r.Plugin.Slug, ansiReset, ansiReset,
+				ver,
+				ansiBoldGreen, ansiReset,
+			)
+		}
+	}
+	fmt.Println()
 
 	// Show detailed CVE list when --detail is used
 	if scanDetail && len(vulnerable) > 0 {
-		fmt.Println()
 		for _, r := range vulnerable {
-			fmt.Printf("--- %s@%s (%d CVEs, max CVSS %.1f) ---\n",
-				r.Plugin.Slug, r.Plugin.Version, r.ActiveVulns, r.MaxCVSS)
+			fmt.Printf("--- %s%s%s@%s%s%s (%d CVEs, max CVSS %s) ---\n",
+				ansiBold, r.Plugin.Slug, ansiReset,
+				ansiBold, r.Plugin.Version, ansiReset,
+				r.ActiveVulns, colorCVSS(r.MaxCVSS))
 			for _, v := range r.Vulns {
 				cve := v.CVE
 				if cve == "" {
@@ -282,9 +316,9 @@ func printScanTable(vulnerable, safe []ScanResult) {
 				if fixed == "" {
 					fixed = "unfixed"
 				}
-				fmt.Printf("  %-18s  CVSS:%-4s  %-8s  %s (fixed: %s)\n",
+				fmt.Printf("  %-18s  CVSS:%s  %-8s  %s (fixed: %s)\n",
 					cve,
-					strconv.FormatFloat(v.CVSS, 'f', 1, 64),
+					colorCVSS(v.CVSS),
 					v.Type,
 					vulnTitle(v.Title),
 					fixed,
