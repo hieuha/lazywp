@@ -1,0 +1,22 @@
+wpscan_keys:
+    - YOUR_WPSCAN_API_KEY_1
+    - YOUR_WPSCAN_API_KEY_2
+wordfence_keys:
+    - YOUR_WORDFENCE_API_KEY_1
+    - YOUR_WORDFENCE_API_KEY_2
+nvd_keys:
+    - YOUR_NVD_API_KEY_1
+key_rotation: round-robin
+proxy_strategy: round-robin
+concurrency: 5
+output_dir: ./downloads
+cache_dir: ./cache
+rate_limits:
+    api.wordpress.org: 5
+    services.nvd.nist.gov: 0.16
+    wpscan.com: 1
+    www.wordfence.com: 0.1
+cache_ttl: 24h
+retry_max: 3
+retry_base_delay: 1s
+title_max_len: 100

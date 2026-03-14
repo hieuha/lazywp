@@ -1,13 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/hieuha/lazywp/internal/config"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var configCmd = &cobra.Command{
@@ -17,14 +16,14 @@ var configCmd = &cobra.Command{
 
 var configSetCmd = &cobra.Command{
 	Use:   "set KEY VALUE",
-	Short: "Set a config value by flat JSON key",
+	Short: "Set a config value by flat YAML key",
 	Args:  cobra.ExactArgs(2),
 	RunE:  runConfigSet,
 }
 
 var configGetCmd = &cobra.Command{
 	Use:   "get KEY",
-	Short: "Get a config value by flat JSON key",
+	Short: "Get a config value by flat YAML key",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runConfigGet,
 }
@@ -37,7 +36,7 @@ var configListCmd = &cobra.Command{
 
 var configInitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Create default config file at ~/.lazywp/config.json",
+	Short: "Create default config file at ./config.yaml",
 	RunE:  runConfigInit,
 }
 
@@ -111,23 +110,27 @@ func runConfigList(cmd *cobra.Command, args []string) error {
 
 	// Redact API keys before display.
 	display := *cfg
-	if len(display.WPScanKeys) > 0 {
-		redacted := make([]string, len(display.WPScanKeys))
-		for i := range display.WPScanKeys {
-			redacted[i] = "[redacted]"
-		}
-		display.WPScanKeys = redacted
-	}
-	if display.NVDKey != "" {
-		display.NVDKey = "[redacted]"
-	}
+	display.WPScanKeys = redactKeys(display.WPScanKeys)
+	display.WordfenceKeys = redactKeys(display.WordfenceKeys)
+	display.NVDKeys = redactKeys(display.NVDKeys)
 
-	out, err := json.MarshalIndent(display, "", "  ")
+	out, err := yaml.Marshal(display)
 	if err != nil {
 		return err
 	}
-	fmt.Println(string(out))
+	fmt.Print(string(out))
 	return nil
+}
+
+func redactKeys(keys []string) []string {
+	if len(keys) == 0 {
+		return nil
+	}
+	redacted := make([]string, len(keys))
+	for i := range keys {
+		redacted[i] = "[redacted]"
+	}
+	return redacted
 }
 
 func runConfigInit(cmd *cobra.Command, args []string) error {
@@ -149,53 +152,48 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// setConfigField sets a flat JSON key on the config struct via marshal/unmarshal.
+// setConfigField sets a field on the config via YAML marshal/unmarshal round-trip.
 func setConfigField(cfg *config.Config, key, value string) error {
-	raw, err := json.Marshal(cfg)
+	raw, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
 	}
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &m); err != nil {
+	var m map[string]interface{}
+	if err := yaml.Unmarshal(raw, &m); err != nil {
 		return err
 	}
 
-	// Try to parse value as JSON; fall back to quoted string.
-	var jsonVal json.RawMessage
-	if json.Unmarshal([]byte(value), &jsonVal) == nil {
-		m[key] = jsonVal
+	// Try to parse value as YAML (handles arrays, numbers, booleans).
+	var parsed interface{}
+	if err := yaml.Unmarshal([]byte(value), &parsed); err == nil {
+		m[key] = parsed
 	} else {
-		m[key] = json.RawMessage(`"` + strings.ReplaceAll(value, `"`, `\"`) + `"`)
+		m[key] = value
 	}
 
-	merged, err := json.Marshal(m)
+	merged, err := yaml.Marshal(m)
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(merged, cfg); err != nil {
+	if err := yaml.Unmarshal(merged, cfg); err != nil {
 		return fmt.Errorf("invalid value for key %q: %w", key, err)
 	}
 	return nil
 }
 
-// getConfigField retrieves a flat JSON key from the config struct.
+// getConfigField retrieves a field from the config via YAML marshal/unmarshal.
 func getConfigField(cfg *config.Config, key string) (string, error) {
-	raw, err := json.Marshal(cfg)
+	raw, err := yaml.Marshal(cfg)
 	if err != nil {
 		return "", err
 	}
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &m); err != nil {
+	var m map[string]interface{}
+	if err := yaml.Unmarshal(raw, &m); err != nil {
 		return "", err
 	}
 	val, ok := m[key]
 	if !ok {
 		return "", fmt.Errorf("unknown config key: %s", key)
 	}
-	// Strip outer quotes for plain strings.
-	s := string(val)
-	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
-		s = s[1 : len(s)-1]
-	}
-	return s, nil
+	return fmt.Sprintf("%v", val), nil
 }

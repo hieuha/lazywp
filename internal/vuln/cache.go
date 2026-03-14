@@ -65,3 +65,112 @@ func (c *Cache) Invalidate(source, key string) error {
 	}
 	return nil
 }
+
+// ClearSource removes all cached files for a given source.
+func (c *Cache) ClearSource(source string) (int, error) {
+	dir := filepath.Join(c.baseDir, source)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("cache read dir %s: %w", dir, err)
+	}
+	count := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, e.Name())); err == nil {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// ClearAll removes all cached files across all sources.
+func (c *Cache) ClearAll() (int, error) {
+	entries, err := os.ReadDir(c.baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("cache read base dir: %w", err)
+	}
+	total := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		n, err := c.ClearSource(e.Name())
+		if err != nil {
+			return total, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
+// BaseDir returns the cache base directory path.
+func (c *Cache) BaseDir() string { return c.baseDir }
+
+// CacheInfo holds metadata about a cached source.
+type CacheInfo struct {
+	Source    string
+	CachedAt time.Time
+	Age      time.Duration
+	Expired  bool
+	FileSize int64
+}
+
+// Info returns cache metadata for a specific (source, key) entry.
+// Returns nil if not cached.
+func (c *Cache) Info(source, key string) *CacheInfo {
+	path := c.keyToFilename(source, key)
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	age := time.Since(info.ModTime())
+	return &CacheInfo{
+		Source:    source,
+		CachedAt: info.ModTime(),
+		Age:      age,
+		Expired:  age > c.defaultTTL,
+		FileSize: info.Size(),
+	}
+}
+
+// SourceInfo returns cache info for a source's main feed entry.
+func (c *Cache) SourceInfo(source string) *CacheInfo {
+	dir := filepath.Join(c.baseDir, source)
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		return nil
+	}
+	// Find the most recent file
+	var newest os.FileInfo
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		fi, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if newest == nil || fi.ModTime().After(newest.ModTime()) {
+			newest = fi
+		}
+	}
+	if newest == nil {
+		return nil
+	}
+	age := time.Since(newest.ModTime())
+	return &CacheInfo{
+		Source:    source,
+		CachedAt: newest.ModTime(),
+		Age:      age,
+		Expired:  age > c.defaultTTL,
+		FileSize: newest.Size(),
+	}
+}

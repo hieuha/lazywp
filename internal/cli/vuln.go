@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/hieuha/lazywp/internal/client"
 	"github.com/hieuha/lazywp/internal/downloader"
@@ -19,6 +20,7 @@ var (
 	vulnSeverity string
 	vulnMonth    int
 	vulnYear     int
+	vulnDetail bool
 )
 
 var vulnCmd = &cobra.Command{
@@ -37,7 +39,36 @@ func init() {
 	vulnCmd.Flags().StringVar(&vulnSeverity, "severity", "", "Wordfence CVSS severity: critical|high|medium|low")
 	vulnCmd.Flags().IntVar(&vulnMonth, "month", 0, "Wordfence month filter (1-12)")
 	vulnCmd.Flags().IntVar(&vulnYear, "year", 0, "Wordfence year filter (e.g. 2024)")
+	vulnCmd.Flags().BoolVar(&vulnDetail, "detail", false, "Show detailed CVEs for each plugin in top results")
 	rootCmd.AddCommand(vulnCmd)
+}
+
+// printQueryInfo prints a summary of the current query parameters.
+func printQueryInfo() {
+	if quiet || outputFmt != "table" {
+		return
+	}
+	parts := []string{}
+	if vulnSlug != "" {
+		parts = append(parts, fmt.Sprintf("slug=%s", vulnSlug))
+	}
+	if vulnTop > 0 {
+		parts = append(parts, fmt.Sprintf("top=%d", vulnTop))
+	}
+	parts = append(parts, fmt.Sprintf("source=%s", vulnSource))
+	if vulnCWE != "" {
+		parts = append(parts, fmt.Sprintf("cwe=%s", vulnCWE))
+	}
+	if vulnSeverity != "" {
+		parts = append(parts, fmt.Sprintf("severity=%s", vulnSeverity))
+	}
+	if vulnMonth > 0 {
+		parts = append(parts, fmt.Sprintf("month=%d", vulnMonth))
+	}
+	if vulnYear > 0 {
+		parts = append(parts, fmt.Sprintf("year=%d", vulnYear))
+	}
+	fmt.Printf("Query: %s\n\n", strings.Join(parts, ", "))
 }
 
 func runVuln(cmd *cobra.Command, args []string) error {
@@ -54,24 +85,34 @@ func runVuln(cmd *cobra.Command, args []string) error {
 }
 
 func runVulnBySlug(ctx context.Context) error {
+	printQueryInfo()
+	printCacheSummary("wordfence", "wpscan", "nvd")
+
 	vulns, warnings := appDeps.VulnAgg.FetchForSlug(ctx, vulnSlug, appDeps.ItemType)
-	for _, w := range warnings {
-		fmt.Printf("warning: %s\n", w)
+	if outputFmt == "table" {
+		for _, w := range warnings {
+			fmt.Printf("warning: %s\n", w)
+		}
 	}
 
 	if len(vulns) == 0 {
-		fmt.Printf("No vulnerabilities found for %s\n", vulnSlug)
+		if outputFmt == "table" {
+			fmt.Printf("No vulnerabilities found for %s\n", vulnSlug)
+		} else {
+			fmtr.Print(nil, nil, vulns)
+		}
 		return nil
 	}
 
-	headers := []string{"CVE", "CVSS", "Type", "Title", "Source", "Fixed In"}
+	headers := []string{"CVE", "CVSS", "Type", "Title", "Affected", "Source", "Fixed In"}
 	rows := make([][]string, len(vulns))
 	for i, v := range vulns {
 		rows[i] = []string{
 			v.CVE,
 			strconv.FormatFloat(v.CVSS, 'f', 1, 64),
 			v.Type,
-			truncate(v.Title, 60),
+			vulnTitle(v.Title),
+			v.AffectedVersions,
 			v.Source,
 			v.FixedIn,
 		}
@@ -88,6 +129,9 @@ func runVulnBySlug(ctx context.Context) error {
 }
 
 func runVulnTop(ctx context.Context) error {
+	printQueryInfo()
+	printCacheSummary("wordfence")
+
 	filters := client.WordfenceFilters{
 		CWEType:    vulnCWE,
 		CVSSRating: vulnSeverity,
@@ -100,8 +144,19 @@ func runVulnTop(ctx context.Context) error {
 		return fmt.Errorf("fetch vuln plugins: %w", err)
 	}
 	if len(items) == 0 {
-		fmt.Println("No vulnerable items found.")
+		if outputFmt == "table" {
+			fmt.Println("No vulnerable items found.")
+		} else {
+			fmtr.Print(nil, nil, items)
+		}
 		return nil
+	}
+
+	// Strip Vulns from JSON/CSV output when --detail is not requested.
+	if !vulnDetail {
+		for i := range items {
+			items[i].Vulns = nil
+		}
 	}
 
 	headers := []string{"#", "Slug", "Vuln Count", "Max CVSS"}
@@ -116,6 +171,32 @@ func runVulnTop(ctx context.Context) error {
 	}
 	fmtr.Print(headers, rows, items)
 
+	if vulnDetail && outputFmt == "table" {
+		fmt.Println()
+		for _, it := range items {
+			fmt.Printf("--- %s (%d vulns, max CVSS %.1f) ---\n", it.Slug, it.VulnCount, it.MaxCVSS)
+			for _, v := range it.Vulns {
+				cve := v.CVE
+				if cve == "" {
+					cve = "N/A"
+				}
+				fixed := v.FixedIn
+				if fixed == "" {
+					fixed = "unfixed"
+				}
+				fmt.Printf("  %-18s  CVSS:%-4s  %-8s  %s  (affected: %s, fixed: %s)\n",
+					cve,
+					strconv.FormatFloat(v.CVSS, 'f', 1, 64),
+					v.Type,
+					vulnTitle(v.Title),
+					v.AffectedVersions,
+					fixed,
+				)
+			}
+			fmt.Println()
+		}
+	}
+
 	if vulnDownload {
 		jobs := make([]downloader.DownloadJob, len(items))
 		for i, it := range items {
@@ -127,6 +208,14 @@ func runVulnTop(ctx context.Context) error {
 	return nil
 }
 
+// vulnTitle returns the title, truncated per config title_max_len (0 = no truncation).
+func vulnTitle(s string) string {
+	if appDeps == nil || appDeps.Config.TitleMaxLen <= 0 {
+		return s
+	}
+	return truncate(s, appDeps.Config.TitleMaxLen)
+}
+
 // truncate shortens a string to max n runes, appending "..." if trimmed.
 func truncate(s string, n int) string {
 	runes := []rune(s)
@@ -135,3 +224,15 @@ func truncate(s string, n int) string {
 	}
 	return string(runes[:n-3]) + "..."
 }
+
+// printCacheSummary prints cache info lines for the given sources (table format only).
+func printCacheSummary(sources ...string) {
+	if quiet || outputFmt != "table" {
+		return
+	}
+	for _, src := range sources {
+		PrintCacheInfo(src)
+	}
+	fmt.Println()
+}
+

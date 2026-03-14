@@ -72,8 +72,8 @@ CVE databases (WPScan, NVD, Wordfence) for vulnerability analysis.`,
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging")
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Suppress non-essential output")
-	rootCmd.PersistentFlags().StringVarP(&outputFmt, "output", "o", "table", "Output format: table|json|csv")
-	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Config file path (default: ~/.lazywp/config.json)")
+	rootCmd.PersistentFlags().StringVarP(&outputFmt, "format", "f", "table", "Output format: table|json|csv")
+	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Config file path (default: ./config.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&itemType, "type", "t", "plugin", "Resource type: plugin|theme")
 }
 

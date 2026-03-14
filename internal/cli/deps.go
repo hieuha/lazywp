@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/hieuha/lazywp/internal/client"
 	"github.com/hieuha/lazywp/internal/config"
@@ -19,7 +17,7 @@ type AppDeps struct {
 	HTTPClient *lazywphttp.Client
 	WPClient   *client.WordPressClient
 	Storage    *storage.Manager
-	KeyRotator *lazywphttp.KeyRotator
+	VulnCache  *vuln.Cache
 	VulnAgg    *vuln.Aggregator
 	Engine     *downloader.Engine
 	WFClient   *client.WordfenceClient // exposed for vuln command wordfence filters
@@ -38,20 +36,17 @@ func BuildDeps(cfg *config.Config, itemTypeStr string) (*AppDeps, error) {
 		return nil, fmt.Errorf("build http client: %w", err)
 	}
 
-	// Vuln cache stored under ~/.lazywp/cache/
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("get home dir: %w", err)
-	}
-	cacheDir := filepath.Join(home, ".lazywp", "cache")
+	cacheDir := cfg.CacheDir
 	vulnCache := vuln.NewCache(cacheDir, cfg.CacheTTLDuration())
 
-	keyRotator := lazywphttp.NewKeyRotator(cfg.WPScanKeys)
+	wpscanRotator := lazywphttp.NewKeyRotator(cfg.WPScanKeys)
+	wfRotator := lazywphttp.NewKeyRotator(cfg.WordfenceKeys)
+	nvdRotator := lazywphttp.NewKeyRotator(cfg.EffectiveNVDKeys())
 
 	wpClient := client.NewWordPressClient(httpClient, it)
-	wpscanClient := client.NewWPScanClient(httpClient, keyRotator, vulnCache)
-	nvdClient := client.NewNVDClient(httpClient, cfg.NVDKey, vulnCache)
-	wfClient := client.NewWordfenceClient(httpClient, vulnCache)
+	wpscanClient := client.NewWPScanClient(httpClient, wpscanRotator, vulnCache)
+	nvdClient := client.NewNVDClient(httpClient, nvdRotator, vulnCache)
+	wfClient := client.NewWordfenceClient(httpClient, wfRotator, vulnCache)
 
 	aggregator := vuln.NewAggregator([]vuln.VulnSource{wpscanClient, nvdClient, wfClient})
 
@@ -67,7 +62,7 @@ func BuildDeps(cfg *config.Config, itemTypeStr string) (*AppDeps, error) {
 		HTTPClient: httpClient,
 		WPClient:   wpClient,
 		Storage:    stor,
-		KeyRotator: keyRotator,
+		VulnCache:  vulnCache,
 		VulnAgg:    aggregator,
 		Engine:     engine,
 		WFClient:   wfClient,

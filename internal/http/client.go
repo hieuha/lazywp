@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/hieuha/lazywp/internal/config"
@@ -94,23 +93,14 @@ func (c *Client) Do(ctx context.Context, req *http.Request) (*http.Response, err
 			continue
 		}
 
-		// Success
-		if resp.StatusCode < 500 && resp.StatusCode != 429 {
+		// Return 429 directly so callers with key rotation can handle it
+		if resp.StatusCode == 429 {
 			return resp, nil
 		}
 
-		// Handle 429 Too Many Requests
-		if resp.StatusCode == 429 {
-			if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
-				if secs, err := strconv.Atoi(retryAfter); err == nil {
-					select {
-					case <-ctx.Done():
-						resp.Body.Close()
-						return nil, ctx.Err()
-					case <-time.After(time.Duration(secs) * time.Second):
-					}
-				}
-			}
+		// Success for non-server-error codes
+		if resp.StatusCode < 500 {
+			return resp, nil
 		}
 
 		lastErr = fmt.Errorf("HTTP %d from %s", resp.StatusCode, req.URL)

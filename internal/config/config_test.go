@@ -37,12 +37,12 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestLoadSave(t *testing.T) {
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.json")
+	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	// Create and save config
 	original := DefaultConfig()
 	original.WPScanKeys = []string{"key1", "key2"}
-	original.NVDKey = "nvd-test-key"
+	original.NVDKeys = []string{"nvd-test-key"}
 	original.Concurrency = 10
 	original.RetryMax = 5
 
@@ -60,8 +60,8 @@ func TestLoadSave(t *testing.T) {
 		t.Errorf("WPScanKeys mismatch: got %v, want [key1 key2]", loaded.WPScanKeys)
 	}
 
-	if loaded.NVDKey != "nvd-test-key" {
-		t.Errorf("NVDKey: got %q, want %q", loaded.NVDKey, "nvd-test-key")
+	if len(loaded.NVDKeys) != 1 || loaded.NVDKeys[0] != "nvd-test-key" {
+		t.Errorf("NVDKeys: got %v, want [nvd-test-key]", loaded.NVDKeys)
 	}
 
 	if loaded.Concurrency != 10 {
@@ -75,7 +75,7 @@ func TestLoadSave(t *testing.T) {
 
 func TestLoadMissing(t *testing.T) {
 	// Load from non-existent path should return defaults
-	loaded, err := Load("/tmp/nonexistent/config.json")
+	loaded, err := Load("/tmp/nonexistent/config.yaml")
 
 	if err != nil {
 		t.Fatalf("Load should not error on missing file: %v", err)
@@ -194,7 +194,7 @@ func TestRetryBaseDelayDuration(t *testing.T) {
 
 func TestConfigDirPermissions(t *testing.T) {
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "test_config.json")
+	configPath := filepath.Join(tmpDir, "test_config.yaml")
 
 	cfg := DefaultConfig()
 	if err := cfg.Save(configPath); err != nil {

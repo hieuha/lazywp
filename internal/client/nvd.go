@@ -17,14 +17,14 @@ const nvdAPIBase = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
 // NVDClient fetches vulnerability data from the NVD/NIST CVE API 2.0.
 type NVDClient struct {
-	http   *lazywphttp.Client
-	apiKey string
-	cache  *vuln.Cache
+	http       *lazywphttp.Client
+	keyRotator *lazywphttp.KeyRotator
+	cache      *vuln.Cache
 }
 
-// NewNVDClient creates an NVDClient. apiKey may be empty for unauthenticated access.
-func NewNVDClient(httpClient *lazywphttp.Client, apiKey string, cache *vuln.Cache) *NVDClient {
-	return &NVDClient{http: httpClient, apiKey: apiKey, cache: cache}
+// NewNVDClient creates an NVDClient with a KeyRotator for multi-key rotation.
+func NewNVDClient(httpClient *lazywphttp.Client, keyRotator *lazywphttp.KeyRotator, cache *vuln.Cache) *NVDClient {
+	return &NVDClient{http: httpClient, keyRotator: keyRotator, cache: cache}
 }
 
 // Name identifies this source.
@@ -69,6 +69,7 @@ func (n *NVDClient) FetchRecent(ctx context.Context, limit int) ([]storage.Vulne
 }
 
 // queryNVD executes a request to the NVD API with the given query parameters.
+// On 403/429, marks the current key as exhausted and retries with the next key.
 func (n *NVDClient) queryNVD(ctx context.Context, params url.Values) ([]storage.Vulnerability, error) {
 	reqURL := nvdAPIBase + "?" + params.Encode()
 
@@ -76,8 +77,12 @@ func (n *NVDClient) queryNVD(ctx context.Context, params url.Values) ([]storage.
 	if err != nil {
 		return nil, fmt.Errorf("nvd: build request: %w", err)
 	}
-	if n.apiKey != "" {
-		req.Header.Set("apiKey", n.apiKey)
+	var usedKey string
+	if n.keyRotator != nil {
+		if key, err := n.keyRotator.Next(); err == nil && key != "" {
+			req.Header.Set("apiKey", key)
+			usedKey = key
+		}
 	}
 	req.Header.Set("User-Agent", "lazywp-cli/1.0")
 
@@ -86,6 +91,16 @@ func (n *NVDClient) queryNVD(ctx context.Context, params url.Values) ([]storage.
 		return nil, fmt.Errorf("nvd: request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		if usedKey != "" && n.keyRotator != nil {
+			n.keyRotator.UpdateQuota(usedKey, 0)
+			if !n.keyRotator.AllExhausted() {
+				return n.queryNVD(ctx, params) // retry with next key
+			}
+		}
+		return nil, fmt.Errorf("nvd: rate limited (HTTP %d) — all API keys exhausted", resp.StatusCode)
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("nvd: HTTP %d", resp.StatusCode)

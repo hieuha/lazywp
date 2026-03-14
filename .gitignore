@@ -79,6 +79,13 @@ ck.md
 # Gemini CLI settings (symlink to .claude/.mcp.json)
 .gemini/settings.json
 .claude/settings.bak.json
+# Config (real keys)
+config.yaml
+
+# Downloads and cache
+downloads/
+cache/
+
 # Go
 lazywp
 *.exe
