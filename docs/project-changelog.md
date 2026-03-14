@@ -2,7 +2,7 @@
 
 All notable changes to lazywp are documented here.
 
-## [Unreleased]
+## [0.5.0] - 2026-03-14
 
 ### Added
 - `report` command — generate self-contained HTML vulnerability report from scan JSON

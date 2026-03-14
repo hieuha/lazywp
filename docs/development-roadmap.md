@@ -1,6 +1,6 @@
 # Development Roadmap
 
-## Current Version: 0.4.0
+## Current Version: 0.5.0
 
 ## Phase 1 — Core CLI (COMPLETE)
 - [x] Bulk download plugins/themes with resume support
