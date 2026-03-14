@@ -15,6 +15,7 @@ import (
 var (
 	scanSource  string
 	scanNoCache bool
+	scanDetail  bool
 )
 
 var scanCmd = &cobra.Command{
@@ -37,6 +38,7 @@ Examples:
 func init() {
 	scanCmd.Flags().StringVar(&scanSource, "source", "all", "Vulnerability source: wpscan|nvd|wordfence|all")
 	scanCmd.Flags().BoolVar(&scanNoCache, "no-cache", false, "Skip cache, force fresh API lookups (results still cached)")
+	scanCmd.Flags().BoolVar(&scanDetail, "detail", false, "Show detailed CVE list for vulnerable items")
 	rootCmd.AddCommand(scanCmd)
 }
 
@@ -222,17 +224,43 @@ func printScanTable(vulnerable, safe []ScanResult) {
 			if r.ActiveVulns == 1 {
 				cveLabel = "CVE"
 			}
-			fixInfo := ""
+			updateHint := ""
 			if r.MaxFixedIn != "" {
-				fixInfo = fmt.Sprintf(", fixed in %s", r.MaxFixedIn)
+				updateHint = fmt.Sprintf(" → update to %s", r.MaxFixedIn)
+			} else {
+				updateHint = " → no fix available"
 			}
-			fmt.Printf("  %-30s  %d %s (max CVSS %.1f%s)\n",
+			fmt.Printf("  %-30s  %d %s (max CVSS %.1f)%s\n",
 				r.Plugin.Slug+"@"+r.Plugin.Version,
 				r.ActiveVulns, cveLabel,
-				r.MaxCVSS, fixInfo,
+				r.MaxCVSS, updateHint,
 			)
+
+			// Show detailed CVE list when --detail is used
+			if scanDetail {
+				for _, v := range r.Vulns {
+					cve := v.CVE
+					if cve == "" {
+						cve = "N/A"
+					}
+					fixed := v.FixedIn
+					if fixed == "" {
+						fixed = "unfixed"
+					}
+					fmt.Printf("    %-18s  CVSS:%-4s  %-8s  %s (fixed: %s)\n",
+						cve,
+						strconv.FormatFloat(v.CVSS, 'f', 1, 64),
+						v.Type,
+						vulnTitle(v.Title),
+						fixed,
+					)
+				}
+				fmt.Println()
+			}
 		}
-		fmt.Println()
+		if !scanDetail {
+			fmt.Println()
+		}
 	}
 
 	if len(safe) > 0 {
