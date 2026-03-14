@@ -1,33 +1,33 @@
-# lazywp - Huong Dan Su Dung
+# lazywp - Hướng Dẫn Sử Dụng
 
-## Gioi Thieu
+## Giới Thiệu
 
-lazywp la cong cu CLI danh cho cac nha nghien cuu bao mat, giup tai hang loat plugin/theme WordPress va doi chieu voi cac co so du lieu lo hong (Wordfence, WPScan, NVD).
+lazywp là công cụ CLI dành cho các nhà nghiên cứu bảo mật, giúp tải hàng loạt plugin/theme WordPress và đối chiếu với các cơ sở dữ liệu lỗ hổng (Wordfence, WPScan, NVD).
 
 ---
 
-## 1. Tim Plugin Co Nhieu Lo Hong Nhat
+## 1. Tìm Plugin Có Nhiều Lỗ Hổng Nhất
 
-Tim top 10 plugin co nhieu lo hong SQL injection:
+Tìm top 10 plugin có nhiều lỗ hổng SQL injection:
 
 ```bash
 lazywp vuln --top 10 --cwe-type sqli
 ```
 
-Xem chi tiet tung CVE cua moi plugin:
+Xem chi tiết từng CVE của mỗi plugin:
 
 ```bash
 lazywp vuln --top 10 --cwe-type sqli --detail
 ```
 
-Loc theo muc do nghiem trong:
+Lọc theo mức độ nghiêm trọng:
 
 ```bash
 lazywp vuln --top 10 --severity critical
 lazywp vuln --top 5 --severity high --cwe-type xss
 ```
 
-Loc theo thoi gian:
+Lọc theo thời gian:
 
 ```bash
 lazywp vuln --top 10 --cwe-type rce --year 2025 --month 3
@@ -35,16 +35,16 @@ lazywp vuln --top 10 --cwe-type rce --year 2025 --month 3
 
 ---
 
-## 2. Tra Cuu Lo Hong Cua Mot Plugin Cu The
+## 2. Tra Cứu Lỗ Hổng Của Một Plugin Cụ Thể
 
-Tra cuu tat ca lo hong da biet cua mot plugin:
+Tra cứu tất cả lỗ hổng đã biết của một plugin:
 
 ```bash
 lazywp vuln --slug contact-form-7
 lazywp vuln --slug contest-gallery
 ```
 
-Chi tra cuu tu mot nguon cu the:
+Chỉ tra cứu từ một nguồn cụ thể:
 
 ```bash
 lazywp vuln --slug akismet --source wordfence
@@ -53,29 +53,29 @@ lazywp vuln --slug akismet --source nvd
 
 ---
 
-## 3. Tai Hang Loat Plugin De Phan Tich
+## 3. Tải Hàng Loạt Plugin Để Phân Tích
 
-### Tai top plugin pho bien
+### Tải top plugin phổ biến
 
 ```bash
 lazywp top --count 50 --download
 ```
 
-### Tai plugin moi nhat
+### Tải plugin mới nhất
 
 ```bash
 lazywp top --browse new --count 20 --download
 ```
 
-### Tim kiem va tai
+### Tìm kiếm và tải
 
 ```bash
 lazywp search "ecommerce" --count 10
 ```
 
-### Tai tu danh sach file
+### Tải từ danh sách file
 
-Tao file `plugins.txt`:
+Tạo file `plugins.txt`:
 
 ```
 akismet
@@ -83,13 +83,13 @@ contact-form-7:6.1.5
 elementor
 ```
 
-Chay lenh:
+Chạy lệnh:
 
 ```bash
 lazywp download --list plugins.txt
 ```
 
-### Ep tai lai du da ton tai
+### Ép tải lại dù đã tồn tại
 
 ```bash
 lazywp top --count 10 --download --force
@@ -97,15 +97,15 @@ lazywp top --count 10 --download --force
 
 ---
 
-## 4. Tai Plugin Co Lo Hong De Kiem Thu
+## 4. Tải Plugin Có Lỗ Hổng Để Kiểm Thử
 
-Tim va tai cac plugin co lo hong SQL injection:
+Tìm và tải các plugin có lỗ hổng SQL injection:
 
 ```bash
 lazywp vuln --top 20 --cwe-type sqli --download
 ```
 
-Tai mot plugin cu the sau khi xem CVE:
+Tải một plugin cụ thể sau khi xem CVE:
 
 ```bash
 lazywp vuln --slug contest-gallery --download
@@ -113,23 +113,23 @@ lazywp vuln --slug contest-gallery --download
 
 ---
 
-## 5. Xuat Du Lieu De Bao Cao
+## 5. Xuất Dữ Liệu Để Báo Cáo
 
-### Xuat JSON de xu ly bang script
+### Xuất JSON để xử lý bằng script
 
 ```bash
 lazywp vuln --top 10 --cwe-type sqli -f json > bao-cao-vuln.json
 lazywp vuln --top 5 --detail -f json > bao-cao-chi-tiet.json
 ```
 
-### Xuat CSV de mo bang Excel
+### Xuất CSV để mở bằng Excel
 
 ```bash
 lazywp vuln --slug contest-gallery -f csv > contest-gallery-vulns.csv
 lazywp top --count 100 -f csv > top-plugins.csv
 ```
 
-### Ket hop voi jq de loc du lieu
+### Kết hợp với jq để lọc dữ liệu
 
 ```bash
 lazywp vuln --top 10 -f json | jq '.[].slug'
@@ -138,15 +138,15 @@ lazywp vuln --slug akismet -f json | jq '[.[] | select(.cvss >= 7.0)]'
 
 ---
 
-## 6. Quan Ly Cache
+## 6. Quản Lý Cache
 
-### Xem trang thai cache
+### Xem trạng thái cache
 
 ```bash
 lazywp cache status
 ```
 
-Ket qua:
+Kết quả:
 
 ```
 Cache directory: ./cache
@@ -157,24 +157,24 @@ Cache TTL: 24h
   nvd           cached at 2026-03-14 11:33:31  (age: 2h15m, size: 45.2KB, status: valid)
 ```
 
-### Cap nhat lai du lieu lo hong
+### Cập nhật lại dữ liệu lỗ hổng
 
 ```bash
 lazywp cache update
 ```
 
-### Xoa cache
+### Xóa cache
 
 ```bash
 lazywp cache clear --source wordfence
-lazywp cache clear  # xoa tat ca
+lazywp cache clear  # xóa tất cả
 ```
 
 ---
 
-## 7. Lam Viec Voi Theme
+## 7. Làm Việc Với Theme
 
-Tat ca lenh deu ho tro theme qua `--type theme` (`-t theme`):
+Tất cả lệnh đều hỗ trợ theme qua `--type theme` (`-t theme`):
 
 ```bash
 lazywp top -t theme --count 20
@@ -184,22 +184,22 @@ lazywp vuln --slug flavor -t theme
 
 ---
 
-## 8. Cau Hinh
+## 8. Cấu Hình
 
-### Khoi tao config
+### Khởi tạo config
 
 ```bash
 cp config.yaml.example config.yaml
-# Sua config.yaml, them API key cua ban
+# Sửa config.yaml, thêm API key của bạn
 ```
 
-### Xem cau hinh hien tai
+### Xem cấu hình hiện tại
 
 ```bash
 lazywp config list
 ```
 
-### Thay doi cau hinh
+### Thay đổi cấu hình
 
 ```bash
 lazywp config set concurrency 10
@@ -207,17 +207,17 @@ lazywp config set cache_ttl 12h
 lazywp config set output_dir /data/wp-downloads
 ```
 
-### Su dung file config khac
+### Sử dụng file config khác
 
 ```bash
-lazywp --config /duong-dan/config.yaml vuln --top 10
+lazywp --config /đường-dẫn/config.yaml vuln --top 10
 ```
 
 ---
 
-## 9. Xoay Nhieu API Key Tu Dong
+## 9. Xoay Nhiều API Key Tự Động
 
-Cau hinh nhieu API key de tu dong xoay khi bi gioi han:
+Cấu hình nhiều API key để tự động xoay khi bị giới hạn:
 
 ```yaml
 # config.yaml
@@ -230,16 +230,16 @@ wpscan_keys:
   - WPSCAN_KEY_2
 ```
 
-Khi mot key bi 429 (rate limit), lazywp tu dong chuyen sang key tiep theo va thu lai.
+Khi một key bị 429 (rate limit), lazywp tự động chuyển sang key tiếp theo và thử lại.
 
 ---
 
-## Meo Su Dung
+## Mẹo Sử Dụng
 
-- Dung `-q` (quiet) de an thong tin cache/query, output gon hon
-- Dung `-f json` de lay output dang may doc duoc (khong lan text)
-- Dat `title_max_len: 0` trong config de hien thi day du tieu de lo hong
-- Wordfence bulk feed (~128MB) duoc cache tai may, cac truy van sau la tuc thi
-- NVD truy van theo tung plugin va cache rieng
-- Dung `--force` de tai lai plugin da co
-- Xem phien ban: `lazywp version`
+- Dùng `-q` (quiet) để ẩn thông tin cache/query, output gọn hơn
+- Dùng `-f json` để lấy output dạng máy đọc được (không lẫn text)
+- Đặt `title_max_len: 0` trong config để hiển thị đầy đủ tiêu đề lỗ hổng
+- Wordfence bulk feed (~128MB) được cache tại máy, các truy vấn sau là tức thì
+- NVD truy vấn theo từng plugin và cache riêng
+- Dùng `--force` để tải lại plugin đã có
+- Xem phiên bản: `lazywp version`
