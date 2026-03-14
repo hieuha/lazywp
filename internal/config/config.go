@@ -26,6 +26,7 @@ type Config struct {
 	RetryBaseDelay string             `yaml:"retry_base_delay"`
 	TitleMaxLen    int                `yaml:"title_max_len"`
 	PDAPIKey       string             `yaml:"projectdiscovery_api_key,omitempty"`
+	PDAPIKeys      []string           `yaml:"projectdiscovery_api_keys,omitempty"`
 }
 
 // DefaultConfig returns config with sensible defaults.
@@ -48,6 +49,17 @@ func DefaultConfig() *Config {
 func (c *Config) EffectiveNVDKeys() []string {
 	if len(c.NVDKeys) > 0 {
 		return c.NVDKeys
+	}
+	return nil
+}
+
+// EffectivePDAPIKeys returns PD API keys (array takes priority over single key).
+func (c *Config) EffectivePDAPIKeys() []string {
+	if len(c.PDAPIKeys) > 0 {
+		return c.PDAPIKeys
+	}
+	if c.PDAPIKey != "" {
+		return []string{c.PDAPIKey}
 	}
 	return nil
 }

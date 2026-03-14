@@ -11,10 +11,11 @@ A high-performance Go CLI tool for bulk downloading WordPress plugins/themes wit
 | Package | Purpose | Key Files |
 |---|---|---|
 | cmd/lazywp | Application entry point | main.go |
-| internal/cli | Command handlers | root.go, download.go, vuln.go, list.go, search.go, stats.go, top.go, export.go, config_cmd.go, version.go, formatter.go, deps.go |
+| internal/cli | Command handlers | root.go, download.go, vuln.go, scan.go, exploit.go, convert.go, list.go, search.go, stats.go, top.go, export.go, config_cmd.go, version.go, formatter.go, deps.go, scan_progress.go, scan_exploit_enrichment.go |
 | internal/client | External API clients | wordpress.go, wpscan.go, nvd.go, wordfence.go, types.go |
 | internal/config | Configuration management | config.go |
 | internal/downloader | Download orchestration | engine.go, progress.go, resume.go |
+| internal/exploit | vulnx integration | lookup.go (CVEInfo, LookupCVEs, CheckAvailable) |
 | internal/http | HTTP utilities | client.go, ratelimit.go, key_rotator.go, proxy.go |
 | internal/storage | File persistence | manager.go, models.go, item_type.go |
 | internal/vuln | Vulnerability aggregation | aggregator.go, cache.go |
@@ -28,13 +29,18 @@ A high-performance Go CLI tool for bulk downloading WordPress plugins/themes wit
 
 ### internal/cli
 **Responsibility:** Command parsing, validation, and output formatting.
-**Files:** 12 files, ~800 LOC (excluding tests)
+**Files:** 19 files, ~1 400 LOC (excluding tests)
 
 | File | Purpose |
 |---|---|
 | `root.go` | Root command, global flags (verbose, quiet, output format, config path), dependency initialization |
 | `download.go` | Download plugin/theme command handler |
 | `vuln.go` | Vulnerability check command handler |
+| `scan.go` | Scan local directory; `--check-exploit` integrates exploit enrichment |
+| `scan_progress.go` | Progress bar helpers for scan operations |
+| `scan_exploit_enrichment.go` | Enriches scan results with vulnx exploit data |
+| `exploit.go` | Standalone exploit/PoC lookup via vulnx; `--file`, `--has-poc`, `--has-nuclei` |
+| `convert.go` | Re-read scan JSON, apply filters, re-export in any format |
 | `list.go` | List downloaded items with filtering |
 | `search.go` | Search WordPress.org for plugins/themes |
 | `stats.go` | Display download statistics |
@@ -304,6 +310,9 @@ Test files present for:
 2. **Commands:**
    - `lazywp download {plugin|theme} <slugs>...`
    - `lazywp vuln check {plugin|theme} <slug>`
+   - `lazywp scan <dir> [-t plugin|theme] [--check-exploit]`
+   - `lazywp exploit [CVE-ID...] [--file scan.json] [--has-poc] [--has-nuclei]`
+   - `lazywp convert <scan.json> [--vuln-only] [--min-cvss N] [--exploitable] [-f csv]`
    - `lazywp list [plugin|theme]`
    - `lazywp search {plugin|theme} <query>`
    - `lazywp stats`

@@ -17,8 +17,9 @@ var (
 	convertCVE        string
 	convertStatus     string
 	convertOutput     string
-	convertVulnOnly   bool
-	convertSafeOnly   bool
+	convertVulnOnly    bool
+	convertSafeOnly    bool
+	convertExploitable bool
 )
 
 var convertCmd = &cobra.Command{
@@ -46,6 +47,7 @@ func init() {
 	convertCmd.Flags().StringVar(&convertStatus, "status", "", "Filter by status: vulnerable|safe")
 	convertCmd.Flags().BoolVar(&convertVulnOnly, "vuln-only", false, "Show only vulnerable plugins")
 	convertCmd.Flags().BoolVar(&convertSafeOnly, "safe-only", false, "Show only safe plugins")
+	convertCmd.Flags().BoolVar(&convertExploitable, "exploitable", false, "Show only plugins with exploitable CVEs (has PoC/KEV/Nuclei)")
 	convertCmd.Flags().StringVarP(&convertOutput, "output", "o", "", "Write output to file (default: stdout)")
 	convertCmd.Flags().BoolVar(&scanDetail, "detail", false, "Show detailed CVE list (table format)")
 	rootCmd.AddCommand(convertCmd)
@@ -108,7 +110,7 @@ func runConvert(cmd *cobra.Command, args []string) error {
 		outFmtr.CSV(headers, rows)
 	default:
 		printScanTable(vulnerable, safe)
-		printScanSummary(len(filtered), len(vulnerable), len(safe))
+		fmt.Printf("Summary: %d scanned, %d vulnerable, %d safe\n", len(filtered), len(vulnerable), len(safe))
 	}
 
 	return nil
@@ -144,6 +146,20 @@ func filterScanResults(results []ScanResult) []ScanResult {
 		// Filter by max CVSS
 		if convertMaxCVSS > 0 && r.MaxCVSS > convertMaxCVSS {
 			continue
+		}
+
+		// Filter by exploitable (has PoC, KEV, or Nuclei template)
+		if convertExploitable {
+			hasExploit := false
+			for _, info := range r.ExploitData {
+				if info.HasPOC || info.IsKEV || info.HasNuclei {
+					hasExploit = true
+					break
+				}
+			}
+			if !hasExploit {
+				continue
+			}
 		}
 
 		// Filter by CVE ID (substring match in any vuln)

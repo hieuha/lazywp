@@ -20,5 +20,8 @@ cache_ttl: 24h
 retry_max: 3
 retry_base_delay: 1s
 title_max_len: 100
-# ProjectDiscovery API key for cvemap exploit lookups (https://cloud.projectdiscovery.io)
-projectdiscovery_api_key: YOUR_PROJECTDISCOVERY_API_KEY
+# ProjectDiscovery API keys for vulnx exploit lookups (https://cloud.projectdiscovery.io)
+# Supports single key (projectdiscovery_api_key) or array (projectdiscovery_api_keys)
+projectdiscovery_api_keys:
+    - YOUR_PROJECTDISCOVERY_API_KEY_1
+    - YOUR_PROJECTDISCOVERY_API_KEY_2

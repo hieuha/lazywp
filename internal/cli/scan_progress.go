@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/schollz/progressbar/v3"
@@ -12,20 +13,23 @@ type scanProgress struct {
 	bar   *progressbar.ProgressBar
 	mu    sync.Mutex
 	quiet bool
+	label string // task label (e.g. "Vuln check", "Exploit check")
 }
 
 // newScanProgress creates a progress bar for scanning N items.
-func newScanProgress(total int, description string, isQuiet bool) *scanProgress {
-	sp := &scanProgress{quiet: isQuiet}
+func newScanProgress(total int, label string, isQuiet bool) *scanProgress {
+	sp := &scanProgress{quiet: isQuiet, label: label}
 	if isQuiet || total == 0 {
 		return sp
 	}
 	sp.bar = progressbar.NewOptions(total,
-		progressbar.OptionSetDescription(description),
+		progressbar.OptionSetDescription(label),
 		progressbar.OptionSetWidth(30),
 		progressbar.OptionShowCount(),
 		progressbar.OptionClearOnFinish(),
 		progressbar.OptionSetPredictTime(true),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetRenderBlankState(true),
 	)
 	return sp
 }
@@ -37,7 +41,8 @@ func (sp *scanProgress) update(currentItem string) {
 	}
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	sp.bar.Describe(fmt.Sprintf("%-30s", truncateSlug(currentItem, 30)))
+	desc := fmt.Sprintf("%s > %-20s", sp.label, truncateSlug(currentItem, 20))
+	sp.bar.Describe(desc)
 	_ = sp.bar.Add(1)
 }
 

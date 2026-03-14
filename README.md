@@ -7,12 +7,14 @@ A high-performance CLI tool for security researchers to bulk-download WordPress 
 - **Bulk Downloads**: Download multiple WordPress plugins and themes in parallel
 - **Local Scan**: Scan local plugin/theme directories, detect versions, and check for vulnerabilities
 - **Vulnerability Scanning**: Cross-reference against WPScan, NVD, and Wordfence databases
+- **Exploit Lookup**: Look up PoC availability, KEV status, EPSS scores, and Nuclei templates via ProjectDiscovery's vulnx
+- **Scan Conversion**: Re-read, filter, and re-export scan JSON results with rich filter options
 - **Multi-Key Rotation**: Automatic API key rotation with auto-retry on 429/401
 - **Resume Support**: Resume interrupted downloads from where they stopped
 - **Rate Limiting**: Per-domain request rate limiting to prevent API throttling
 - **Proxy Support**: Multiple proxy strategies (round-robin, failover, random)
 - **Multiple Output Formats**: Table, JSON, and CSV output (`-f table|json|csv`)
-- **Caching**: File-based vulnerability data caching with configurable TTL
+- **Caching**: File-based vulnerability data caching with configurable TTL (including per-CVE exploit data)
 - **Cache Management**: CLI commands to clear, update, and check cache status
 - **Metadata Tracking**: Comprehensive metadata storage with download history and error logs
 
@@ -88,7 +90,81 @@ lazywp scan /path/to/wp-content/plugins -t plugin
 lazywp scan /path/to/wp-content/themes -t theme
 lazywp scan ./plugins -t plugin --source wordfence
 lazywp scan ./plugins -t plugin --no-cache          # force online lookup
+lazywp scan ./plugins -t plugin --check-exploit     # also fetch PoC/KEV/Nuclei per CVE
 ```
+
+### Exploit Lookup
+
+Look up PoC availability, KEV status, EPSS scores, and Nuclei templates for CVEs via
+ProjectDiscovery's [vulnx](https://github.com/projectdiscovery/cvemap) CLI.
+
+Requires vulnx installed:
+```bash
+go install github.com/projectdiscovery/cvemap/cmd/vulnx@latest
+```
+
+```bash
+# By CVE ID
+lazywp exploit CVE-2024-1234
+lazywp exploit CVE-2024-1234 CVE-2024-5678
+
+# From a scan JSON file
+lazywp exploit --file scan.json
+lazywp exploit --file scan.json --has-poc           # only CVEs with known PoC
+lazywp exploit --file scan.json --has-nuclei        # only CVEs with Nuclei templates
+
+# Output formats
+lazywp exploit --file scan.json -f json -o enriched.json
+lazywp exploit --file scan.json -f csv  -o exploits.csv
+```
+
+| Flag | Description |
+|------|-------------|
+| `--file` | Read CVEs from a scan JSON file instead of CLI args |
+| `--has-poc` | Show only CVEs with a known public PoC |
+| `--has-nuclei` | Show only CVEs with a Nuclei template |
+| `-o` | Write output to file (default: stdout) |
+
+### Convert / Re-export Scan Results
+
+Read a `lazywp scan -f json` output file, apply filters, and re-export in any format.
+
+```bash
+# Table view with details
+lazywp convert scan.json -f table --detail
+
+# Export to CSV
+lazywp convert scan.json -f csv -o report.csv
+
+# Filter by plugin slug
+lazywp convert scan.json --slug elementor --detail
+
+# Filter by vulnerability properties
+lazywp convert scan.json --vuln-only --min-cvss 7.0
+lazywp convert scan.json --max-cvss 5.9 --safe-only
+
+# Filter by specific CVE
+lazywp convert scan.json --cve CVE-2024-1234
+
+# Filter to exploitable only (has PoC, KEV, or Nuclei)
+lazywp convert scan.json --exploitable -f csv -o critical.csv
+
+# Filter by status
+lazywp convert scan.json --status vulnerable -f csv -o vulnerable.csv
+```
+
+| Flag | Description |
+|------|-------------|
+| `--slug` | Substring match on plugin slug |
+| `--min-cvss` | Minimum CVSS score threshold |
+| `--max-cvss` | Maximum CVSS score threshold |
+| `--cve` | Substring match on CVE ID |
+| `--status` | Filter by `vulnerable` or `safe` |
+| `--vuln-only` | Show only vulnerable plugins |
+| `--safe-only` | Show only safe plugins |
+| `--exploitable` | Show only plugins with PoC/KEV/Nuclei data |
+| `-o` | Write output to file (default: stdout) |
+| `--detail` | Show full CVE list (table format) |
 
 ### Cache Management
 
@@ -129,6 +205,10 @@ wordfence_keys:
   - YOUR_WORDFENCE_API_KEY_2
 nvd_keys:
   - YOUR_NVD_API_KEY_1
+# ProjectDiscovery API keys for vulnx exploit lookup (supports rotation)
+projectdiscovery_api_keys:
+  - YOUR_PD_API_KEY_1
+  - YOUR_PD_API_KEY_2
 key_rotation: round-robin
 concurrency: 5
 output_dir: ./downloads
@@ -163,7 +243,8 @@ downloads/
 cache/
 ├── wordfence/
 ├── wpscan/
-└── nvd/
+├── nvd/
+└── vulnx/       # per-CVE exploit data (PoC, KEV, EPSS, Nuclei)
 ```
 
 ## License

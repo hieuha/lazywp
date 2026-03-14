@@ -21,6 +21,7 @@ type AppDeps struct {
 	VulnAgg    *vuln.Aggregator
 	Engine     *downloader.Engine
 	WFClient   *client.WordfenceClient // exposed for vuln command wordfence filters
+	PDRotator  *lazywphttp.KeyRotator // ProjectDiscovery API key rotator
 	ItemType   client.ItemType
 }
 
@@ -48,6 +49,8 @@ func BuildDeps(cfg *config.Config, itemTypeStr string) (*AppDeps, error) {
 	nvdClient := client.NewNVDClient(httpClient, nvdRotator, vulnCache)
 	wfClient := client.NewWordfenceClient(httpClient, wfRotator, vulnCache)
 
+	pdRotator := lazywphttp.NewKeyRotator(cfg.EffectivePDAPIKeys())
+
 	aggregator := vuln.NewAggregator([]vuln.VulnSource{wpscanClient, nvdClient, wfClient})
 
 	stor := storage.NewManager(cfg.OutputDir)
@@ -66,6 +69,7 @@ func BuildDeps(cfg *config.Config, itemTypeStr string) (*AppDeps, error) {
 		VulnAgg:    aggregator,
 		Engine:     engine,
 		WFClient:   wfClient,
+		PDRotator:  pdRotator,
 		ItemType:   it,
 	}, nil
 }

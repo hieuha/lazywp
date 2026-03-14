@@ -8,16 +8,18 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hieuha/lazywp/internal/exploit"
 	"github.com/hieuha/lazywp/internal/scanner"
 	"github.com/hieuha/lazywp/internal/storage"
 	"github.com/spf13/cobra"
 )
 
 var (
-	scanSource  string
-	scanNoCache bool
-	scanDetail  bool
-	scanOutput  string
+	scanSource       string
+	scanNoCache      bool
+	scanDetail       bool
+	scanOutput       string
+	scanCheckExploit bool
 )
 
 var scanCmd = &cobra.Command{
@@ -32,7 +34,8 @@ detection strategies differ: plugins use readme.txt/PHP headers, themes use styl
 Examples:
   lazywp scan /path/to/wp-content/plugins --type plugin
   lazywp scan /path/to/wp-content/themes --type theme
-  lazywp scan ./plugins -t plugin --source wordfence -f json`,
+  lazywp scan ./plugins -t plugin --source wordfence -f json
+  lazywp scan ./plugins -t plugin --check-exploit`,
 	Args:  cobra.ExactArgs(1),
 	RunE:  runScan,
 }
@@ -42,17 +45,19 @@ func init() {
 	scanCmd.Flags().BoolVar(&scanNoCache, "no-cache", false, "Skip cache, force fresh API lookups (results still cached)")
 	scanCmd.Flags().BoolVar(&scanDetail, "detail", false, "Show detailed CVE list for vulnerable items")
 	scanCmd.Flags().StringVarP(&scanOutput, "output", "o", "", "Write results to file (default: stdout)")
+	scanCmd.Flags().BoolVar(&scanCheckExploit, "check-exploit", false, "Check exploit/PoC availability via vulnx")
 	rootCmd.AddCommand(scanCmd)
 }
 
 // ScanResult holds vulnerability lookup results for a scanned plugin.
 type ScanResult struct {
-	Plugin       scanner.ScannedPlugin  `json:"plugin"`
-	Vulns        []storage.Vulnerability `json:"vulns,omitempty"`
-	ActiveVulns  int                     `json:"active_vulns"`
-	MaxCVSS      float64                 `json:"max_cvss"`
-	MaxFixedIn   string                  `json:"max_fixed_in,omitempty"`
-	IsVulnerable bool                    `json:"is_vulnerable"`
+	Plugin       scanner.ScannedPlugin      `json:"plugin"`
+	Vulns        []storage.Vulnerability    `json:"vulns,omitempty"`
+	ActiveVulns  int                        `json:"active_vulns"`
+	MaxCVSS      float64                    `json:"max_cvss"`
+	MaxFixedIn   string                     `json:"max_fixed_in,omitempty"`
+	IsVulnerable bool                       `json:"is_vulnerable"`
+	ExploitData  map[string]exploit.CVEInfo `json:"exploit_data,omitempty"`
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -62,6 +67,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if scanNoCache {
 		appDeps.VulnCache.SetDisabled(true)
 		defer appDeps.VulnCache.SetDisabled(false)
+	}
+
+	// Verify vulnx is installed before scanning if exploit check requested
+	if scanCheckExploit {
+		if err := exploit.CheckAvailable(); err != nil {
+			return err
+		}
 	}
 
 	plugins, err := scanner.ScanDirectory(dir, appDeps.ItemType)
@@ -78,24 +90,16 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if !quiet && outputFmt == "table" {
-		fmt.Printf("Scanning: %s (%d %ss found)\n\n", dir, len(plugins), itemType)
-	}
-
 	// Sort plugins: cached first (faster), uncached after
 	cached, uncached := partitionByCacheStatus(plugins)
 	ordered := append(cached, uncached...)
-	if !quiet && outputFmt == "table" {
-		fmt.Printf("  %d %ss found in cache, %d need API lookup\n\n", len(cached), itemType, len(uncached))
-	}
 
 	results, disabledSources := lookupVulnerabilities(ctx, ordered)
 
-	// Print disabled sources after progress bar completes
-	if !quiet && outputFmt == "table" {
-		for src := range disabledSources {
-			fmt.Printf("[!] %s disabled: API key error\n", src)
-		}
+	// Exploit enrichment via vulnx
+	var exploitWarning string
+	if scanCheckExploit {
+		exploitWarning = enrichScanWithExploitData(results)
 	}
 
 	// Partition into vulnerable and safe
@@ -137,7 +141,14 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Table format (always to stdout)
 	printScanTable(vulnerable, safe)
-	printScanSummary(len(plugins), len(vulnerable), len(safe))
+	printScanSummary(dir, len(plugins), len(cached), len(uncached), len(vulnerable), len(safe), disabledSources)
+
+	if scanCheckExploit {
+		if exploitWarning != "" {
+			fmt.Println(exploitWarning)
+		}
+		printExploitScanSummary(results)
+	}
 
 	return nil
 }
@@ -277,12 +288,13 @@ func printScanTable(vulnerable, safe []ScanResult) {
 			if r.MaxFixedIn != "" {
 				updateHint = "update to " + ansiCyan + r.MaxFixedIn + ansiReset
 			}
-			fmt.Printf("  %s%s%s@%s%s%s  %s%d%s %s (CVSS %s) → %s\n",
+			fmt.Printf("  %s%s%s@%s%s%s  %s%d%s %s (CVSS %s)%s → %s\n",
 				ansiBold, r.Plugin.Slug, ansiReset,
 				ansiBold, r.Plugin.Version, ansiReset,
 				ansiBold, r.ActiveVulns, ansiReset,
 				cveLabel,
 				colorCVSS(r.MaxCVSS),
+				exploitSummary(r),
 				updateHint,
 			)
 		}
@@ -321,13 +333,14 @@ func printScanTable(vulnerable, safe []ScanResult) {
 				if fixed == "" {
 					fixed = "unfixed"
 				}
-				fmt.Printf("  #%-3d %-18s  CVSS:%s  %-8s  %s (fixed: %s)\n",
+				fmt.Printf("  #%-3d %-18s  CVSS:%s  %-8s  %s (fixed: %s)%s\n",
 					i+1,
 					cve,
 					colorCVSS(v.CVSS),
 					v.Type,
 					vulnTitle(v.Title),
 					fixed,
+					exploitCVELabel(r, v.CVE),
 				)
 			}
 			fmt.Println()
@@ -335,22 +348,27 @@ func printScanTable(vulnerable, safe []ScanResult) {
 	}
 }
 
-// printScanSummary prints the final summary line.
-func printScanSummary(total, vulnCount, safeCount int) {
+// printScanSummary prints scan metadata and summary at the bottom.
+func printScanSummary(dir string, total, cached, uncached, vulnCount, safeCount int, disabled map[string]bool) {
 	if quiet {
 		return
 	}
-	fmt.Printf("Summary: %s scanned, %s vulnerable, %s safe\n",
-		strconv.Itoa(total),
-		strconv.Itoa(vulnCount),
-		strconv.Itoa(safeCount),
+	fmt.Printf("Scanned: %s (%d %ss, %d cached, %d API lookup)\n", dir, total, itemType, cached, uncached)
+	for src := range disabled {
+		fmt.Printf("[!] %s disabled: API key error\n", src)
+	}
+	fmt.Printf("Summary: %d scanned, %s%d vulnerable%s, %s%d safe%s\n",
+		total,
+		ansiBoldRed, vulnCount, ansiReset,
+		ansiBoldGreen, safeCount, ansiReset,
 	)
 }
 
 // flattenScanResults converts scan results to CSV-friendly rows.
 // One row per CVE (vulnerable plugins expand to multiple rows).
 func flattenScanResults(results []ScanResult) ([]string, [][]string) {
-	headers := []string{"slug", "version", "status", "cve_count", "max_cvss", "update_to", "cve", "cvss", "type", "title", "fixed_in"}
+	headers := []string{"slug", "version", "status", "cve_count", "max_cvss", "update_to",
+		"cve", "cvss", "type", "title", "fixed_in", "has_poc", "is_kev", "epss", "has_nuclei"}
 	var rows [][]string
 
 	for _, r := range results {
@@ -362,6 +380,7 @@ func flattenScanResults(results []ScanResult) ([]string, [][]string) {
 			rows = append(rows, []string{
 				r.Plugin.Slug, ver, "safe",
 				"0", "0.0", "", "", "", "", "", "",
+				"", "", "", "",
 			})
 			continue
 		}
@@ -370,6 +389,13 @@ func flattenScanResults(results []ScanResult) ([]string, [][]string) {
 			fixed := v.FixedIn
 			if fixed == "" {
 				fixed = "unfixed"
+			}
+			hasPOC, isKEV, epss, hasNuclei := "", "", "", ""
+			if info, ok := r.ExploitData[v.CVE]; ok {
+				hasPOC = strconv.FormatBool(info.HasPOC)
+				isKEV = strconv.FormatBool(info.IsKEV)
+				epss = strconv.FormatFloat(info.EPSS, 'f', 4, 64)
+				hasNuclei = strconv.FormatBool(info.HasNuclei)
 			}
 			rows = append(rows, []string{
 				r.Plugin.Slug,
@@ -383,6 +409,7 @@ func flattenScanResults(results []ScanResult) ([]string, [][]string) {
 				v.Type,
 				v.Title,
 				fixed,
+				hasPOC, isKEV, epss, hasNuclei,
 			})
 		}
 	}

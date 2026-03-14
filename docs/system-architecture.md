@@ -11,6 +11,7 @@ github.com/hieuha/lazywp/
 │   ├── client/              # API clients for external services
 │   ├── config/              # Configuration management
 │   ├── downloader/          # Download orchestration
+│   ├── exploit/             # vulnx integration (CVEInfo, LookupCVEs)
 │   ├── http/                # HTTP client with rate limiting
 │   ├── storage/             # File and metadata persistence
 │   └── vuln/                # Vulnerability aggregation
@@ -31,6 +32,11 @@ github.com/hieuha/lazywp/
 - `root.go` - Root command with global flags (verbose, quiet, output format, config path)
 - `download.go` - Download plugin/theme command
 - `vuln.go` - Vulnerability check command
+- `scan.go` - Scan local directory; supports `--check-exploit` to enrich with exploit data
+- `scan_progress.go` - Progress bar helpers shared by scan and exploit commands
+- `scan_exploit_enrichment.go` - Batch enrichment of scan results via vulnx
+- `exploit.go` - Standalone exploit/PoC lookup (`lazywp exploit [CVE...] [--file] [--has-poc]`)
+- `convert.go` - Re-read scan JSON, filter, re-export (`lazywp convert`)
 - `list.go` - List downloaded items
 - `search.go` - Search WordPress.org
 - `stats.go` - Display download statistics
@@ -40,6 +46,14 @@ github.com/hieuha/lazywp/
 - `version.go` - Display CLI version
 - `formatter.go` - Output formatting (table, JSON, CSV)
 - `deps.go` - Dependency injection for services
+
+### internal/exploit
+**Responsibility:** Wrap ProjectDiscovery's vulnx CLI for CVE exploit metadata.
+
+**Key Files:**
+- Provides `CVEInfo` struct (CVEID, CVSS, Severity, HasPOC, POCCount, POCURLs, IsKEV, EPSS, HasNuclei, NucleiURL)
+- `CheckAvailable()` - verifies vulnx is installed
+- `LookupCVEs(ids, apiKey, onProgress)` - batched lookups (10 CVEs/batch, 3s inter-batch delay, rate-limit retry)
 
 **Output Formats:**
 - Table (human-readable)
