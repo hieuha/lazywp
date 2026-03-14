@@ -56,7 +56,11 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 func runDownloadSingle(ctx context.Context) error {
 	if !quiet {
-		fmt.Printf("Downloading %s %s...\n", appDeps.ItemType, dlSlug)
+		ver := dlVersion
+		if ver == "" {
+			ver = "latest"
+		}
+		fmt.Printf("Downloading %s %s@%s...\n", appDeps.ItemType, dlSlug, ver)
 	}
 	result, err := appDeps.Engine.DownloadOne(ctx, dlSlug, dlVersion, appDeps.ItemType, forceDown)
 	if errors.Is(err, downloader.ErrAlreadyExists) {
