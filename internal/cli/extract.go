@@ -15,6 +15,7 @@ var (
 	extractSlug      string
 	extractList      string
 	extractOutputDir string
+	extractSourceDir string
 	extractClean     bool
 )
 
@@ -32,6 +33,7 @@ func init() {
 	extractCmd.Flags().StringVar(&extractSlug, "slug", "", "Extract a specific plugin/theme by slug")
 	extractCmd.Flags().StringVar(&extractList, "list", "", "Path to file with slugs to extract (one per line)")
 	extractCmd.Flags().StringVar(&extractOutputDir, "output-dir", "", "Output directory (default: ./extracted)")
+	extractCmd.Flags().StringVar(&extractSourceDir, "source-dir", "", "Source downloads directory (default: config output_dir)")
 	extractCmd.Flags().BoolVar(&extractClean, "clean", false, "Remove existing extracted files before extracting")
 	rootCmd.AddCommand(extractCmd)
 }
@@ -53,8 +55,14 @@ func runExtract(cmd *cobra.Command, args []string) error {
 
 	typeName := string(appDeps.ItemType) + "s" // "plugins" or "themes"
 
+	// Resolve source base directory (downloads folder)
+	sourceBase := appDeps.Storage.BaseDir()
+	if extractSourceDir != "" {
+		sourceBase = extractSourceDir
+	}
+
 	// Determine which slugs to extract
-	slugs, err := resolveExtractSlugs(typeName)
+	slugs, err := resolveExtractSlugs(typeName, sourceBase)
 	if err != nil {
 		return err
 	}
@@ -65,7 +73,7 @@ func runExtract(cmd *cobra.Command, args []string) error {
 
 	var succeeded, failed int
 	for _, slug := range slugs {
-		if err := extractSlugVersions(typeName, slug, destDir); err != nil {
+		if err := extractSlugVersions(typeName, slug, destDir, sourceBase); err != nil {
 			fmt.Fprintf(os.Stderr, "  ERROR %s: %s\n", slug, err)
 			failed++
 		} else {
@@ -81,7 +89,7 @@ func runExtract(cmd *cobra.Command, args []string) error {
 }
 
 // resolveExtractSlugs determines which slugs to extract based on flags.
-func resolveExtractSlugs(typeName string) ([]string, error) {
+func resolveExtractSlugs(typeName, sourceBase string) ([]string, error) {
 	if extractSlug != "" {
 		return []string{extractSlug}, nil
 	}
@@ -91,7 +99,7 @@ func resolveExtractSlugs(typeName string) ([]string, error) {
 	}
 
 	// Default: discover all downloaded slugs from disk
-	return discoverDownloadedSlugs(typeName)
+	return discoverDownloadedSlugs(typeName, sourceBase)
 }
 
 // readExtractList reads a file with one slug per line.
@@ -117,8 +125,8 @@ func readExtractList(path string) ([]string, error) {
 }
 
 // discoverDownloadedSlugs lists all slug directories under downloads/<type>.
-func discoverDownloadedSlugs(typeName string) ([]string, error) {
-	typeDir := filepath.Join(appDeps.Storage.BaseDir(), typeName)
+func discoverDownloadedSlugs(typeName, sourceBase string) ([]string, error) {
+	typeDir := filepath.Join(sourceBase, typeName)
 	entries, err := os.ReadDir(typeDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -137,8 +145,8 @@ func discoverDownloadedSlugs(typeName string) ([]string, error) {
 }
 
 // extractSlugVersions finds and extracts all version zips for a given slug.
-func extractSlugVersions(typeName, slug, destDir string) error {
-	slugDir := filepath.Join(appDeps.Storage.BaseDir(), typeName, slug)
+func extractSlugVersions(typeName, slug, destDir, sourceBase string) error {
+	slugDir := filepath.Join(sourceBase, typeName, slug)
 	versions, err := os.ReadDir(slugDir)
 	if err != nil {
 		return fmt.Errorf("read versions for %s: %w", slug, err)
