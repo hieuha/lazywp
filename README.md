@@ -16,6 +16,7 @@ A high-performance CLI tool for security researchers to bulk-download WordPress 
 - **Multiple Output Formats**: Table, JSON, and CSV output (`-f table|json|csv`)
 - **Caching**: File-based vulnerability data caching with configurable TTL (including per-CVE exploit data)
 - **Cache Management**: CLI commands to clear, update, and check cache status
+- **Watch Mode**: Monitor plugins/themes for new versions and CVEs with one-shot or daemon mode
 - **Metadata Tracking**: Comprehensive metadata storage with download history and error logs
 
 ## Installation
@@ -192,6 +193,36 @@ lazywp vuln --slug akismet -f sarif
 gh api repos/{owner}/{repo}/code-scanning/sarifs \
   -f "sarif=$(cat results.sarif | base64)"
 ```
+
+### Watch for Updates
+
+```bash
+# One-shot check (exit code 1 if changes found — CI-friendly)
+lazywp watch --slug akismet
+lazywp watch --list slugs.txt
+
+# Daemon mode with interval
+lazywp watch --list slugs.txt --daemon --interval 1h
+
+# Output to JSON file
+lazywp watch --list slugs.txt -o changes.json
+
+# Send webhook on changes
+lazywp watch --list slugs.txt --webhook https://hooks.example.com/notify
+
+# Reset state (start fresh)
+lazywp watch --reset
+```
+
+| Flag | Description |
+|------|-------------|
+| `--slug` | Single slug to monitor |
+| `--list` | File with slugs (one per line) |
+| `--daemon` | Run continuously on an interval |
+| `--interval` | Check interval for daemon mode (default: `24h`) |
+| `--webhook` | URL to POST JSON changes to |
+| `-o` | Write JSON report to file |
+| `--reset` | Delete state file and exit |
 
 ### Cache Management
 

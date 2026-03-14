@@ -1,6 +1,6 @@
 # Development Roadmap
 
-## Current Version: 0.5.0
+## Current Version: 0.6.0
 
 ## Phase 1 — Core CLI (COMPLETE)
 - [x] Bulk download plugins/themes with resume support
@@ -37,11 +37,13 @@
 - [x] Map CVEs to SARIF rules, CVSS to severity levels
 - [x] Upload via `gh api` for PR annotations
 
-### 2.5 Auto-Update Monitoring
-- `lazywp watch --list slugs.txt` — monitor plugins for new versions/CVEs
-- Polling interval configurable (default: daily)
-- Notification output (stdout, JSON webhook)
-- Compare against previously downloaded versions
+### 2.5 Auto-Update Monitoring (COMPLETE)
+- [x] `lazywp watch --slug/--list` — monitor plugins for new versions/CVEs
+- [x] One-shot mode (default) with exit code 1 on changes for CI/cron
+- [x] Daemon mode with configurable interval (`--daemon --interval`)
+- [x] Webhook notification support (`--webhook`)
+- [x] JSON report output (`-o`)
+- [x] State management with baseline tracking and `--reset`
 
 ## Phase 3 — Distribution & CI (PLANNED)
 

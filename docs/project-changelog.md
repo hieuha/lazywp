@@ -2,6 +2,16 @@
 
 All notable changes to lazywp are documented here.
 
+## [0.6.0] - 2026-03-14
+
+### Added
+- `watch` command — monitor plugins/themes for new versions and CVEs
+- One-shot mode (default) with exit code 1 on changes — CI/cron friendly
+- Daemon mode with configurable interval (`--daemon --interval 1h`)
+- Webhook notification support (`--webhook <url>`)
+- JSON report output (`-o changes.json`)
+- State management with `--reset` to clear baseline
+
 ## [0.5.0] - 2026-03-14
 
 ### Added
