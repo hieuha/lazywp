@@ -77,8 +77,8 @@ type DownloadResult struct {
 // Returns DownloadResult with the resolved version on success.
 func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType client.ItemType, force ...bool) (*DownloadResult, error) {
 	isForce := len(force) > 0 && force[0]
-	if !isForce && e.storage.Exists(string(itemType), slug, version) {
-		return nil, ErrAlreadyExists
+	if !isForce && version != "" && e.storage.Exists(string(itemType), slug, version) {
+		return &DownloadResult{Slug: slug, Version: version}, ErrAlreadyExists
 	}
 
 	// Fetch WordPress metadata for this item
@@ -94,6 +94,11 @@ func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType
 	}
 
 	result := &DownloadResult{Slug: slug, Version: effectiveVersion}
+
+	// Check exists after version resolution (covers empty --version case)
+	if !isForce && version == "" && e.storage.Exists(string(itemType), slug, effectiveVersion) {
+		return result, ErrAlreadyExists
+	}
 
 	downloadURL := e.wpClient.DownloadURL(slug, effectiveVersion)
 

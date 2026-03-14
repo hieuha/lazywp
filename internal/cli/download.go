@@ -58,10 +58,10 @@ func runDownloadSingle(ctx context.Context) error {
 	if !quiet {
 		fmt.Printf("Downloading %s %s...\n", appDeps.ItemType, dlSlug)
 	}
-	result, err := appDeps.Engine.DownloadOne(ctx, dlSlug, dlVersion, appDeps.ItemType)
+	result, err := appDeps.Engine.DownloadOne(ctx, dlSlug, dlVersion, appDeps.ItemType, forceDown)
 	if errors.Is(err, downloader.ErrAlreadyExists) {
 		if !quiet {
-			fmt.Printf("Already exists: %s (use --force to re-download)\n", dlSlug)
+			fmt.Printf("Already exists: %s@%s (use --force to re-download)\n", result.Slug, result.Version)
 		}
 		return nil
 	}
