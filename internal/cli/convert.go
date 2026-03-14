@@ -75,18 +75,31 @@ func runConvert(cmd *cobra.Command, args []string) error {
 		outFmtr = NewFormatter(outputFmt, f)
 	}
 
-	// Auto-detect format: try scan results first, then vuln flat CVEs.
-	var scanResults []ScanResult
-	if err := json.Unmarshal(data, &scanResults); err == nil && len(scanResults) > 0 && scanResults[0].Plugin.Slug != "" {
+	// Detect format via {"type": "scan"|"vuln", "data": [...]} envelope.
+	var envelope struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil || envelope.Type == "" {
+		return fmt.Errorf("unrecognized JSON format: expected {\"type\": \"scan\"|\"vuln\", \"data\": [...]}")
+	}
+
+	switch envelope.Type {
+	case "scan":
+		var scanResults []ScanResult
+		if err := json.Unmarshal(envelope.Data, &scanResults); err != nil {
+			return fmt.Errorf("parse scan data: %w", err)
+		}
 		return convertScanJSON(outFmtr, scanResults)
-	}
-
-	var vulnResults []flatVuln
-	if err := json.Unmarshal(data, &vulnResults); err == nil && len(vulnResults) > 0 && vulnResults[0].CVE != "" {
+	case "vuln":
+		var vulnResults []flatVuln
+		if err := json.Unmarshal(envelope.Data, &vulnResults); err != nil {
+			return fmt.Errorf("parse vuln data: %w", err)
+		}
 		return convertVulnJSON(outFmtr, vulnResults)
+	default:
+		return fmt.Errorf("unknown JSON type %q (expected \"scan\" or \"vuln\")", envelope.Type)
 	}
-
-	return fmt.Errorf("unrecognized JSON format (expected scan or vuln output)")
 }
 
 // convertScanJSON handles JSON from `lazywp scan`.
@@ -97,7 +110,7 @@ func convertScanJSON(outFmtr *Formatter, results []ScanResult) error {
 		if outputFmt == "table" {
 			fmt.Println("No results match the given filters.")
 		} else {
-			outFmtr.Print(nil, nil, []ScanResult{})
+			outFmtr.TypedJSON("scan", []ScanResult{})
 		}
 		return nil
 	}
@@ -113,7 +126,7 @@ func convertScanJSON(outFmtr *Formatter, results []ScanResult) error {
 
 	switch outputFmt {
 	case "json":
-		outFmtr.JSON(filtered)
+		outFmtr.TypedJSON("scan", filtered)
 	case "csv":
 		headers, rows := flattenScanResults(append(vulnerable, safe...))
 		outFmtr.CSV(headers, rows)
@@ -132,14 +145,14 @@ func convertVulnJSON(outFmtr *Formatter, results []flatVuln) error {
 		if outputFmt == "table" {
 			fmt.Println("No results match the given filters.")
 		} else {
-			outFmtr.JSON([]flatVuln{})
+			outFmtr.TypedJSON("vuln", []flatVuln{})
 		}
 		return nil
 	}
 
 	switch outputFmt {
 	case "json":
-		outFmtr.JSON(filtered)
+		outFmtr.TypedJSON("vuln", filtered)
 	case "csv":
 		headers, rows := flattenVulnRows(filtered)
 		outFmtr.CSV(headers, rows)

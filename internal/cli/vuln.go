@@ -129,7 +129,7 @@ func runVulnBySlug(ctx context.Context) error {
 		if outputFmt == "table" {
 			fmt.Printf("No vulnerabilities found for %s\n", vulnSlug)
 		} else {
-			outFmtr.Print(nil, nil, vulns)
+			outFmtr.PrintTyped("vuln", nil, nil, vulns)
 		}
 		return nil
 	}
@@ -155,7 +155,7 @@ func runVulnBySlug(ctx context.Context) error {
 			v.FixedIn,
 		}
 	}
-	outFmtr.Print(headers, rows, vulns)
+	outFmtr.PrintTyped("vuln", headers, rows, vulns)
 
 	if vulnDownload {
 		ctx2 := context.Background()
@@ -191,7 +191,7 @@ func runVulnTop(ctx context.Context) error {
 		if outputFmt == "table" {
 			fmt.Println("No vulnerable items found.")
 		} else {
-			outFmtr.Print(nil, nil, items)
+			outFmtr.PrintTyped("vuln", nil, nil, items)
 		}
 		return nil
 	}
@@ -200,7 +200,7 @@ func runVulnTop(ctx context.Context) error {
 	if vulnDetail && outputFmt != "table" {
 		flat := flattenVulnItems(items)
 		if outputFmt == "json" {
-			outFmtr.JSON(flat)
+			outFmtr.TypedJSON("vuln", flat)
 		} else {
 			headers, rows := flattenVulnRows(flat)
 			outFmtr.CSV(headers, rows)
@@ -223,7 +223,7 @@ func runVulnTop(ctx context.Context) error {
 				strconv.FormatFloat(it.MaxCVSS, 'f', 1, 64),
 			}
 		}
-		outFmtr.Print(headers, rows, items)
+		outFmtr.PrintTyped("vuln", headers, rows, items)
 
 		if vulnDetail && outputFmt == "table" {
 			fmt.Println()
@@ -329,7 +329,7 @@ func runVulnBatch(ctx context.Context) error {
 
 	// JSON/CSV output
 	if outputFmt != "table" {
-		outFmtr.JSON(allResults)
+		outFmtr.TypedJSON("vuln", allResults)
 	}
 
 	// Summary

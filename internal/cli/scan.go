@@ -144,7 +144,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	if outputFmt == "json" {
-		outFmtr.JSON(results)
+		outFmtr.TypedJSON("scan", results)
 		return nil
 	}
 

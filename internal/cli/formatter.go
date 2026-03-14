@@ -32,6 +32,18 @@ func (f *Formatter) Print(headers []string, rows [][]string, data any) {
 	}
 }
 
+// PrintTyped is like Print but wraps JSON output in a typed envelope.
+func (f *Formatter) PrintTyped(typeName string, headers []string, rows [][]string, data any) {
+	switch f.format {
+	case "json":
+		f.TypedJSON(typeName, data)
+	case "csv":
+		f.CSV(headers, rows)
+	default:
+		f.Table(headers, rows)
+	}
+}
+
 // Table renders aligned columns using tabwriter with bold headers.
 func (f *Formatter) Table(headers []string, rows [][]string) {
 	tw := tabwriter.NewWriter(f.writer, 0, 0, 2, ' ', 0)
@@ -50,6 +62,12 @@ func (f *Formatter) Table(headers []string, rows [][]string) {
 	tw.Flush()
 }
 
+// jsonEnvelope wraps JSON output with a type discriminator for auto-detection.
+type jsonEnvelope struct {
+	Type string `json:"type"`
+	Data any    `json:"data"`
+}
+
 // JSON marshals data as indented JSON and writes to the writer.
 func (f *Formatter) JSON(data any) {
 	out, err := json.MarshalIndent(data, "", "  ")
@@ -58,6 +76,11 @@ func (f *Formatter) JSON(data any) {
 		return
 	}
 	fmt.Fprintf(f.writer, "%s\n", out)
+}
+
+// TypedJSON wraps data in a {"type": ..., "data": ...} envelope for auto-detection.
+func (f *Formatter) TypedJSON(typeName string, data any) {
+	f.JSON(jsonEnvelope{Type: typeName, Data: data})
 }
 
 // CSV writes headers and rows as RFC 4180 CSV.
