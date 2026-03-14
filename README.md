@@ -17,6 +17,7 @@ A high-performance CLI tool for security researchers to bulk-download WordPress 
 - **Caching**: File-based vulnerability data caching with configurable TTL (including per-CVE exploit data)
 - **Cache Management**: CLI commands to clear, update, and check cache status
 - **Watch Mode**: Monitor plugins/themes for new versions and CVEs with one-shot or daemon mode
+- **Zip Extraction**: Extract downloaded zips for SAST analysis (Semgrep, CodeQL, etc.)
 - **Metadata Tracking**: Comprehensive metadata storage with download history and error logs
 
 ## Installation
@@ -65,6 +66,17 @@ lazywp search "ecommerce" --count 20
 lazywp download akismet
 lazywp download akismet hello-dolly --force
 lazywp download --list plugins.txt
+```
+
+### Extract for SAST
+
+```bash
+lazywp extract                              # extract all downloaded plugins
+lazywp extract --slug akismet               # extract specific plugin
+lazywp extract --list slugs.txt             # extract from list
+lazywp extract --output-dir ./sast-target   # custom output dir
+lazywp extract --clean                      # clean before extracting
+lazywp extract -t theme                     # extract themes
 ```
 
 ### Check Vulnerabilities

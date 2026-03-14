@@ -1,6 +1,6 @@
 # Development Roadmap
 
-## Current Version: 0.6.0
+## Current Version: 0.7.0
 
 ## Phase 1 — Core CLI (COMPLETE)
 - [x] Bulk download plugins/themes with resume support
@@ -44,6 +44,12 @@
 - [x] Webhook notification support (`--webhook`)
 - [x] JSON report output (`-o`)
 - [x] State management with baseline tracking and `--reset`
+
+### 2.6 Zip Extraction for SAST (COMPLETE)
+- [x] `lazywp extract` — extract downloaded zip files for static analysis
+- [x] Supports `--slug`, `--list`, `--output-dir`, `--clean`
+- [x] Zip-slip protection and zip bomb size limit
+- [x] Flat directory output for Semgrep, CodeQL, etc.
 
 ## Phase 3 — Distribution & CI (PLANNED)
 

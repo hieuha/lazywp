@@ -2,6 +2,14 @@
 
 All notable changes to lazywp are documented here.
 
+## [0.7.0] - 2026-03-14
+
+### Added
+- `extract` command — extract downloaded plugin/theme zip files for SAST analysis
+- Supports `--slug`, `--list`, `--output-dir`, `--clean` flags
+- Zip-slip path traversal protection and zip bomb size limit (500MB)
+- Flat output structure (`extracted/<slug>/<version>/`) for easy SAST tool integration
+
 ## [0.6.0] - 2026-03-14
 
 ### Added
