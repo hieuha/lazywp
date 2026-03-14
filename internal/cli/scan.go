@@ -238,62 +238,60 @@ func isAPIKeyError(warning string) bool {
 
 // printScanTable renders the vulnerable/safe sections in table format.
 func printScanTable(vulnerable, safe []ScanResult) {
-	if len(vulnerable) > 0 {
-		fmt.Printf("VULNERABLE (%d):\n", len(vulnerable))
-		for _, r := range vulnerable {
-			cveLabel := "CVEs"
-			if r.ActiveVulns == 1 {
-				cveLabel = "CVE"
-			}
-			updateHint := ""
-			if r.MaxFixedIn != "" {
-				updateHint = fmt.Sprintf(" → update to %s", r.MaxFixedIn)
-			} else {
-				updateHint = " → no fix available"
-			}
-			fmt.Printf("  %-30s  %d %s (max CVSS %.1f)%s\n",
-				r.Plugin.Slug+"@"+r.Plugin.Version,
-				r.ActiveVulns, cveLabel,
-				r.MaxCVSS, updateHint,
-			)
+	// Combine all results into a single table with header
+	allResults := append(vulnerable, safe...)
+	headers := []string{"Plugin", "Version", "Status", "CVEs", "Max CVSS", "Update To"}
+	rows := make([][]string, 0, len(allResults))
 
-			// Show detailed CVE list when --detail is used
-			if scanDetail {
-				for _, v := range r.Vulns {
-					cve := v.CVE
-					if cve == "" {
-						cve = "N/A"
-					}
-					fixed := v.FixedIn
-					if fixed == "" {
-						fixed = "unfixed"
-					}
-					fmt.Printf("    %-18s  CVSS:%-4s  %-8s  %s (fixed: %s)\n",
-						cve,
-						strconv.FormatFloat(v.CVSS, 'f', 1, 64),
-						v.Type,
-						vulnTitle(v.Title),
-						fixed,
-					)
-				}
-				fmt.Println()
+	for _, r := range allResults {
+		ver := r.Plugin.Version
+		if ver == "" {
+			ver = "unknown"
+		}
+		status := "SAFE"
+		cves := "0"
+		maxCVSS := "-"
+		updateTo := "-"
+		if r.IsVulnerable {
+			status = "VULNERABLE"
+			cves = strconv.Itoa(r.ActiveVulns)
+			maxCVSS = strconv.FormatFloat(r.MaxCVSS, 'f', 1, 64)
+			if r.MaxFixedIn != "" {
+				updateTo = r.MaxFixedIn
+			} else {
+				updateTo = "no fix"
 			}
 		}
-		if !scanDetail {
-			fmt.Println()
-		}
+		rows = append(rows, []string{r.Plugin.Slug, ver, status, cves, maxCVSS, updateTo})
 	}
 
-	if len(safe) > 0 {
-		fmt.Printf("SAFE (%d):\n", len(safe))
-		for _, r := range safe {
-			ver := r.Plugin.Version
-			if ver == "" {
-				ver = "unknown"
-			}
-			fmt.Printf("  %-30s  0 CVEs\n", r.Plugin.Slug+"@"+ver)
-		}
+	fmtr.Table(headers, rows)
+
+	// Show detailed CVE list when --detail is used
+	if scanDetail && len(vulnerable) > 0 {
 		fmt.Println()
+		for _, r := range vulnerable {
+			fmt.Printf("--- %s@%s (%d CVEs, max CVSS %.1f) ---\n",
+				r.Plugin.Slug, r.Plugin.Version, r.ActiveVulns, r.MaxCVSS)
+			for _, v := range r.Vulns {
+				cve := v.CVE
+				if cve == "" {
+					cve = "N/A"
+				}
+				fixed := v.FixedIn
+				if fixed == "" {
+					fixed = "unfixed"
+				}
+				fmt.Printf("  %-18s  CVSS:%-4s  %-8s  %s (fixed: %s)\n",
+					cve,
+					strconv.FormatFloat(v.CVSS, 'f', 1, 64),
+					v.Type,
+					vulnTitle(v.Title),
+					fixed,
+				)
+			}
+			fmt.Println()
+		}
 	}
 }
 
