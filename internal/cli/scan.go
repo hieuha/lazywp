@@ -346,13 +346,15 @@ func printScanTable(vulnerable, safe []ScanResult) {
 				if affected == "" {
 					affected = "all"
 				}
-				fmt.Printf("  #%-3d %-18s  CVSS:%s  %-8s  %s (affected: %s, fixed: %s)%s\n",
+				fmt.Printf("  #%-3d %-18s  CVSS:%s  %-8s  %s (affected: %s, min: %s, max: %s, fixed: %s)%s\n",
 					i+1,
 					cve,
 					colorCVSS(v.CVSS),
 					v.Type,
 					vulnTitle(v.Title),
 					affected,
+					v.MinAffectedVersion,
+					v.MaxAffectedVersion,
 					fixed,
 					exploitCVELabel(r, v.CVE),
 				)
@@ -382,7 +384,7 @@ func printScanSummary(dir string, total, cached, uncached, vulnCount, safeCount 
 // One row per CVE (vulnerable plugins expand to multiple rows).
 func flattenScanResults(results []ScanResult) ([]string, [][]string) {
 	headers := []string{"slug", "version", "status", "cve_count", "max_cvss", "update_to",
-		"cve", "cvss", "type", "title", "fixed_in", "has_poc", "is_kev", "epss", "has_nuclei"}
+		"cve", "cvss", "type", "title", "min_affected_version", "max_affected_version", "fixed_in", "has_poc", "is_kev", "epss", "has_nuclei"}
 	var rows [][]string
 
 	for _, r := range results {
@@ -393,7 +395,7 @@ func flattenScanResults(results []ScanResult) ([]string, [][]string) {
 			}
 			rows = append(rows, []string{
 				r.Plugin.Slug, ver, "safe",
-				"0", "0.0", "", "", "", "", "", "",
+				"0", "0.0", "", "", "", "", "", "", "", "",
 				"", "", "", "",
 			})
 			continue
@@ -423,6 +425,8 @@ func flattenScanResults(results []ScanResult) ([]string, [][]string) {
 				strconv.FormatFloat(v.CVSS, 'f', 1, 64),
 				v.Type,
 				v.Title,
+				v.MinAffectedVersion,
+				v.MaxAffectedVersion,
 				fixed,
 				hasPOC, isKEV, epss, hasNuclei,
 			})

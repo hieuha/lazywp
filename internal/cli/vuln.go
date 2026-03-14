@@ -143,7 +143,7 @@ func runVulnBySlug(ctx context.Context) error {
 		return writeVulnSARIF(w, vulnSlug, vulns)
 	}
 
-	headers := []string{"CVE", "CVSS", "Type", "Title", "Affected", "Source", "Fixed In"}
+	headers := []string{"CVE", "CVSS", "Type", "Title", "Affected", "Min Affected", "Max Affected", "Source", "Fixed In"}
 	rows := make([][]string, len(vulns))
 	for i, v := range vulns {
 		rows[i] = []string{
@@ -152,6 +152,8 @@ func runVulnBySlug(ctx context.Context) error {
 			v.Type,
 			vulnTitle(v.Title),
 			v.AffectedVersions,
+			v.MinAffectedVersion,
+			v.MaxAffectedVersion,
 			v.Source,
 			v.FixedIn,
 		}
@@ -240,12 +242,14 @@ func runVulnTop(ctx context.Context) error {
 					if fixed == "" {
 						fixed = "unfixed"
 					}
-					fmt.Printf("  %-18s  CVSS:%-4s  %-8s  %s  (affected: %s, fixed: %s)\n",
+					fmt.Printf("  %-18s  CVSS:%-4s  %-8s  %s  (affected: %s, min: %s, max: %s, fixed: %s)\n",
 						cve,
 						strconv.FormatFloat(v.CVSS, 'f', 1, 64),
 						v.Type,
 						vulnTitle(v.Title),
 						v.AffectedVersions,
+						v.MinAffectedVersion,
+						v.MaxAffectedVersion,
 						fixed,
 					)
 				}
@@ -318,8 +322,8 @@ func runVulnBatch(ctx context.Context) error {
 					if fixed == "" {
 						fixed = "unfixed"
 					}
-					fmt.Printf("  %d. %-18s  CVSS:%s  %s  (fixed: %s)\n",
-						j+1, cve, colorCVSS(v.CVSS), vulnTitle(v.Title), fixed)
+					fmt.Printf("  %d. %-18s  CVSS:%s  %s  (min: %s, max: %s, fixed: %s)\n",
+						j+1, cve, colorCVSS(v.CVSS), vulnTitle(v.Title), v.MinAffectedVersion, v.MaxAffectedVersion, fixed)
 				}
 			}
 			fmt.Println()
