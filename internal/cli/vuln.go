@@ -112,6 +112,10 @@ func runVulnBySlug(ctx context.Context) error {
 		return nil
 	}
 
+	if outputFmt == "sarif" {
+		return writeVulnSARIF(os.Stdout, vulnSlug, vulns)
+	}
+
 	headers := []string{"CVE", "CVSS", "Type", "Title", "Affected", "Source", "Fixed In"}
 	rows := make([][]string, len(vulns))
 	for i, v := range vulns {

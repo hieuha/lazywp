@@ -5,6 +5,7 @@ All notable changes to lazywp are documented here.
 ## [Unreleased]
 
 ### Added
+- SARIF v2.1.0 output format (`-f sarif`) for scan and vuln commands — GitHub Code Scanning integration
 - `vuln --list slugs.txt` — batch vulnerability check for multiple slugs from file
 - Per-slug colored output with vulnerability count and summary
 

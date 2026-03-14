@@ -170,6 +170,20 @@ lazywp convert scan.json --status vulnerable -f csv -o vulnerable.csv
 | `-o` | Write output to file (default: stdout) |
 | `--detail` | Show full CVE list (table format) |
 
+### SARIF Output (CI/CD Integration)
+
+```bash
+# Scan with SARIF output for GitHub Code Scanning
+lazywp scan ./plugins -t plugin -f sarif -o results.sarif
+
+# Vuln check with SARIF output
+lazywp vuln --slug akismet -f sarif
+
+# Upload to GitHub Code Scanning
+gh api repos/{owner}/{repo}/code-scanning/sarifs \
+  -f "sarif=$(cat results.sarif | base64)"
+```
+
 ### Cache Management
 
 ```bash
@@ -190,7 +204,7 @@ lazywp list
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--type` | `-t` | `plugin` | Resource type: `plugin\|theme` |
-| `--format` | `-f` | `table` | Output format: `table\|json\|csv` |
+| `--format` | `-f` | `table` | Output format: `table\|json\|csv\|sarif` |
 | `--config` | | `./config.yaml` | Config file path |
 | `--force` | | `false` | Force re-download existing items |
 | `--verbose` | `-v` | `false` | Enable verbose logging |

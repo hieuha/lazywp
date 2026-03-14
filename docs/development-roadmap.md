@@ -31,11 +31,11 @@
 - Optional PDF export (via wkhtmltopdf or similar)
 - Include exploit data, CVSS distribution, remediation suggestions
 
-### 2.4 SARIF Output
-- `-f sarif` output format for scan and vuln commands
-- Integration with GitHub Code Scanning / CI tools
-- Map CVEs to SARIF rules, CVSS to severity levels
-- Upload via `gh api` for PR annotations
+### 2.4 SARIF Output (COMPLETE)
+- [x] `-f sarif` output format for scan and vuln commands
+- [x] Integration with GitHub Code Scanning / CI tools
+- [x] Map CVEs to SARIF rules, CVSS to severity levels
+- [x] Upload via `gh api` for PR annotations
 
 ### 2.5 Auto-Update Monitoring
 - `lazywp watch --list slugs.txt` — monitor plugins for new versions/CVEs

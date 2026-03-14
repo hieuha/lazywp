@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -126,6 +127,14 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 		defer f.Close()
 		outFmtr = NewFormatter(outputFmt, f)
+	}
+
+	if outputFmt == "sarif" {
+		var w io.Writer = os.Stdout
+		if scanOutput != "" {
+			w = outFmtr.writer
+		}
+		return writeScanSARIF(w, results)
 	}
 
 	if outputFmt == "csv" {
