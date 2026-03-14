@@ -31,6 +31,15 @@ lazywp extract --slug akismet
 lazywp extract --slug elementor --output-dir ./audit
 ```
 
+## Chỉ Định Thư Mục Downloads
+
+Mặc định lấy từ `output_dir` trong config. Dùng `--source-dir` để chỉ định thư mục khác:
+
+```bash
+lazywp extract --source-dir /path/to/my/downloads
+lazywp extract --source-dir ./other-downloads --slug akismet
+```
+
 ## Giải Nén Từ File Danh Sách
 
 ```bash

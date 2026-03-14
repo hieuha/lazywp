@@ -74,10 +74,19 @@ lazywp download --list plugins.txt
 lazywp extract                              # extract all downloaded plugins
 lazywp extract --slug akismet               # extract specific plugin
 lazywp extract --list slugs.txt             # extract from list
+lazywp extract --source-dir ./my-downloads  # custom downloads directory
 lazywp extract --output-dir ./sast-target   # custom output dir
 lazywp extract --clean                      # clean before extracting
 lazywp extract -t theme                     # extract themes
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--slug` | Extract a specific plugin/theme by slug |
+| `--list` | File with slugs to extract (one per line) |
+| `--source-dir` | Source downloads directory (default: config `output_dir`) |
+| `--output-dir` | Output directory (default: `./extracted`) |
+| `--clean` | Remove existing extracted files before extracting |
 
 ### Check Vulnerabilities
 

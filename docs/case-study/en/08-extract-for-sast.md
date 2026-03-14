@@ -31,6 +31,15 @@ lazywp extract --slug akismet
 lazywp extract --slug elementor --output-dir ./audit
 ```
 
+## Custom Downloads Directory
+
+By default, reads from `output_dir` in config. Use `--source-dir` to specify a different directory:
+
+```bash
+lazywp extract --source-dir /path/to/my/downloads
+lazywp extract --source-dir ./other-downloads --slug akismet
+```
+
 ## Extract From List File
 
 ```bash
