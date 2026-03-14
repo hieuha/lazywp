@@ -351,14 +351,16 @@ func recordToVuln(r wfVulnRecord, slug string) storage.Vulnerability {
 	affectedVer := affectedVersionStr(r.Software, slug)
 
 	return storage.Vulnerability{
-		CVE:              cve,
-		CVSS:             cvss,
-		Type:             vulnType,
-		Title:            r.Title,
-		Source:           "wordfence",
-		AffectedVersions: affectedVer,
-		FixedIn:          fixedIn,
-		References:       r.References,
+		CVE:                cve,
+		CVSS:               cvss,
+		Type:               vulnType,
+		Title:              r.Title,
+		Source:             "wordfence",
+		AffectedVersions:   affectedVer,
+		MinAffectedVersion: minFromVersion(r.Software, slug),
+		MaxAffectedVersion: maxToVersion(r.Software, slug),
+		FixedIn:            fixedIn,
+		References:         r.References,
 	}
 }
 
@@ -487,6 +489,68 @@ func firstPatchedVersion(software []wfSoftware, slug string) string {
 		}
 	}
 	return ""
+}
+
+// maxToVersion returns the highest to_version across all affected ranges for a slug.
+func maxToVersion(software []wfSoftware, slug string) string {
+	var best string
+	for _, sw := range software {
+		if slug != "" && sw.Slug != slug {
+			continue
+		}
+		for _, vr := range sw.AffectedVersions {
+			if vr.ToVersion != "" && vr.ToVersion != "*" {
+				if best == "" || compareVersionParts(vr.ToVersion, best) > 0 {
+					best = vr.ToVersion
+				}
+			}
+		}
+	}
+	return best
+}
+
+// minFromVersion returns the lowest from_version across all affected ranges for a slug.
+func minFromVersion(software []wfSoftware, slug string) string {
+	var best string
+	for _, sw := range software {
+		if slug != "" && sw.Slug != slug {
+			continue
+		}
+		for _, vr := range sw.AffectedVersions {
+			if vr.FromVersion != "" && vr.FromVersion != "*" {
+				if best == "" || compareVersionParts(vr.FromVersion, best) < 0 {
+					best = vr.FromVersion
+				}
+			}
+		}
+	}
+	return best
+}
+
+// compareVersionParts compares two dot-separated version strings segment by segment.
+func compareVersionParts(a, b string) int {
+	aParts := strings.Split(a, ".")
+	bParts := strings.Split(b, ".")
+	maxLen := len(aParts)
+	if len(bParts) > maxLen {
+		maxLen = len(bParts)
+	}
+	for i := 0; i < maxLen; i++ {
+		var aNum, bNum int
+		if i < len(aParts) {
+			fmt.Sscanf(aParts[i], "%d", &aNum)
+		}
+		if i < len(bParts) {
+			fmt.Sscanf(bParts[i], "%d", &bNum)
+		}
+		if aNum < bNum {
+			return -1
+		}
+		if aNum > bNum {
+			return 1
+		}
+	}
+	return 0
 }
 
 // affectedVersionStr returns a human-readable affected version range for a slug.

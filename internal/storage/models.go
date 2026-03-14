@@ -27,14 +27,16 @@ type WPMetadata struct {
 
 // Vulnerability represents a known security issue.
 type Vulnerability struct {
-	CVE              string   `json:"cve"`
-	CVSS             float64  `json:"cvss"`
-	Type             string   `json:"type"`
-	Title            string   `json:"title"`
-	Source           string   `json:"source"`
-	AffectedVersions string   `json:"affected_versions"`
-	FixedIn          string   `json:"fixed_in"`
-	References       []string `json:"references,omitempty"`
+	CVE                string   `json:"cve"`
+	CVSS               float64  `json:"cvss"`
+	Type               string   `json:"type"`
+	Title              string   `json:"title"`
+	Source             string   `json:"source"`
+	AffectedVersions   string   `json:"affected_versions"`
+	MinAffectedVersion string   `json:"min_affected_version,omitempty"`
+	MaxAffectedVersion string   `json:"max_affected_version,omitempty"`
+	FixedIn            string   `json:"fixed_in"`
+	References         []string `json:"references,omitempty"`
 }
 
 // IndexEntry represents one item in the download index.

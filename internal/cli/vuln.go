@@ -370,14 +370,16 @@ func runVulnBatch(ctx context.Context) error {
 
 // flatVuln is a single CVE row with the parent plugin slug attached.
 type flatVuln struct {
-	Slug             string  `json:"slug"`
-	CVE              string  `json:"cve"`
-	CVSS             float64 `json:"cvss"`
-	Type             string  `json:"type"`
-	Title            string  `json:"title"`
-	AffectedVersions string  `json:"affected_versions"`
-	FixedIn          string  `json:"fixed_in"`
-	Source           string  `json:"source"`
+	Slug               string  `json:"slug"`
+	CVE                string  `json:"cve"`
+	CVSS               float64 `json:"cvss"`
+	Type               string  `json:"type"`
+	Title              string  `json:"title"`
+	AffectedVersions   string  `json:"affected_versions"`
+	MinAffectedVersion string  `json:"min_affected_version,omitempty"`
+	MaxAffectedVersion string  `json:"max_affected_version,omitempty"`
+	FixedIn            string  `json:"fixed_in"`
+	Source             string  `json:"source"`
 }
 
 // flattenVulnItems expands VulnerableItems into one flatVuln per CVE.
@@ -390,14 +392,16 @@ func flattenVulnItems(items []client.VulnerableItem) []flatVuln {
 				title = vulnTitle(v.Title)
 			}
 			out = append(out, flatVuln{
-				Slug:             it.Slug,
-				CVE:              v.CVE,
-				CVSS:             v.CVSS,
-				Type:             v.Type,
-				Title:            title,
-				AffectedVersions: v.AffectedVersions,
-				FixedIn:          v.FixedIn,
-				Source:           v.Source,
+				Slug:               it.Slug,
+				CVE:                v.CVE,
+				CVSS:               v.CVSS,
+				Type:               v.Type,
+				Title:              title,
+				AffectedVersions:   v.AffectedVersions,
+				MinAffectedVersion: v.MinAffectedVersion,
+				MaxAffectedVersion: v.MaxAffectedVersion,
+				FixedIn:            v.FixedIn,
+				Source:             v.Source,
 			})
 		}
 	}
@@ -406,7 +410,7 @@ func flattenVulnItems(items []client.VulnerableItem) []flatVuln {
 
 // flattenVulnRows converts flatVuln slice into CSV headers and rows.
 func flattenVulnRows(flat []flatVuln) ([]string, [][]string) {
-	headers := []string{"Slug", "CVE", "CVSS", "Type", "Title", "Affected Versions", "Fixed In", "Source"}
+	headers := []string{"Slug", "CVE", "CVSS", "Type", "Title", "Affected Versions", "Min Affected", "Max Affected", "Fixed In", "Source"}
 	rows := make([][]string, len(flat))
 	for i, f := range flat {
 		rows[i] = []string{
@@ -416,6 +420,8 @@ func flattenVulnRows(flat []flatVuln) ([]string, [][]string) {
 			f.Type,
 			f.Title,
 			f.AffectedVersions,
+			f.MinAffectedVersion,
+			f.MaxAffectedVersion,
 			f.FixedIn,
 			f.Source,
 		}
@@ -423,40 +429,18 @@ func flattenVulnRows(flat []flatVuln) ([]string, [][]string) {
 	return headers, rows
 }
 
-// maxAffectedVersion extracts the highest affected version from vulnerability data.
-// Parses "* - X.Y.Z" or "X.Y.Z - X.Y.Z" format and returns the upper bound.
-// Returns empty string if no parseable version is found (falls back to latest).
+// maxAffectedVersion returns the highest MaxAffectedVersion across all vulns.
 func maxAffectedVersion(vulns []storage.Vulnerability) string {
 	var best string
 	for _, v := range vulns {
-		ver := parseUpperBound(v.AffectedVersions)
-		if ver == "" {
+		if v.MaxAffectedVersion == "" {
 			continue
 		}
-		if best == "" || scanner.CompareVersions(ver, best) > 0 {
-			best = ver
+		if best == "" || scanner.CompareVersions(v.MaxAffectedVersion, best) > 0 {
+			best = v.MaxAffectedVersion
 		}
 	}
 	return best
-}
-
-// parseUpperBound extracts the upper version from an affected range string.
-// Handles formats like "* - 5.6.3", "1.0 - 5.6.3", "5.6.3".
-func parseUpperBound(affected string) string {
-	affected = strings.TrimSpace(affected)
-	if affected == "" || affected == "*" {
-		return ""
-	}
-	// "X - Y" format: take Y
-	if idx := strings.LastIndex(affected, " - "); idx >= 0 {
-		v := strings.TrimSpace(affected[idx+3:])
-		if v != "*" && v != "" {
-			return v
-		}
-		return ""
-	}
-	// Single version
-	return affected
 }
 
 // readSlugListFile reads a file of slugs (one per line, # comments allowed).
