@@ -18,6 +18,7 @@ var (
 	convertStatus     string
 	convertOutput     string
 	convertVulnOnly   bool
+	convertSafeOnly   bool
 )
 
 var convertCmd = &cobra.Command{
@@ -43,7 +44,8 @@ func init() {
 	convertCmd.Flags().Float64Var(&convertMaxCVSS, "max-cvss", 0, "Filter by maximum CVSS score")
 	convertCmd.Flags().StringVar(&convertCVE, "cve", "", "Filter by CVE ID (substring match)")
 	convertCmd.Flags().StringVar(&convertStatus, "status", "", "Filter by status: vulnerable|safe")
-	convertCmd.Flags().BoolVar(&convertVulnOnly, "vuln-only", false, "Show only vulnerable plugins (shortcut for --status vulnerable)")
+	convertCmd.Flags().BoolVar(&convertVulnOnly, "vuln-only", false, "Show only vulnerable plugins")
+	convertCmd.Flags().BoolVar(&convertSafeOnly, "safe-only", false, "Show only safe plugins")
 	convertCmd.Flags().StringVarP(&convertOutput, "output", "o", "", "Write output to file (default: stdout)")
 	convertCmd.Flags().BoolVar(&scanDetail, "detail", false, "Show detailed CVE list (table format)")
 	rootCmd.AddCommand(convertCmd)
@@ -128,7 +130,7 @@ func filterScanResults(results []ScanResult) []ScanResult {
 				continue
 			}
 		}
-		if convertStatus == "safe" {
+		if convertSafeOnly || convertStatus == "safe" {
 			if r.IsVulnerable {
 				continue
 			}
