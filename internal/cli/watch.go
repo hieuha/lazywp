@@ -6,15 +6,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/hieuha/lazywp/internal/watch"
 	"github.com/spf13/cobra"
 )
+
+// errChangesDetected is returned when one-shot mode finds changes (exit code 1).
+var errChangesDetected = fmt.Errorf("changes detected")
 
 var (
 	watchSlug     string
@@ -69,10 +74,20 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("must provide --slug or --list")
 	}
 
+	// Validate webhook URL if provided.
+	if watchWebhook != "" {
+		if err := validateWebhookURL(watchWebhook); err != nil {
+			return err
+		}
+	}
+
 	// Resolve slug list.
 	slugs, err := resolveWatchSlugs()
 	if err != nil {
 		return err
+	}
+	if len(slugs) == 0 {
+		return fmt.Errorf("no slugs found")
 	}
 
 	if !watchDaemon {
@@ -84,7 +99,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if len(changes) > 0 {
-			os.Exit(1)
+			return errChangesDetected
 		}
 		return nil
 	}
@@ -102,22 +117,23 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		fmt.Printf("lazywp watch daemon — checking %d slugs every %s (Ctrl+C to stop)\n\n", len(slugs), interval)
 	}
 
+	timer := time.NewTimer(0) // fire immediately for first run
 	for {
-		changes, err := runWatchOnce(slugs, statePath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "watch error: %v\n", err)
-		} else if err := outputChanges(changes); err != nil {
-			fmt.Fprintf(os.Stderr, "output error: %v\n", err)
-		}
-
 		select {
 		case <-sigCh:
+			timer.Stop()
 			if !quiet {
 				fmt.Println("\nWatch stopped.")
 			}
 			return nil
-		case <-time.After(interval):
-			// next iteration
+		case <-timer.C:
+			changes, err := runWatchOnce(slugs, statePath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "watch error: %v\n", err)
+			} else if err := outputChanges(changes); err != nil {
+				fmt.Fprintf(os.Stderr, "output error: %v\n", err)
+			}
+			timer.Reset(interval)
 		}
 	}
 }
@@ -237,22 +253,38 @@ func outputChanges(changes []watch.Change) error {
 	return nil
 }
 
+// validateWebhookURL checks that the webhook URL has an http or https scheme.
+func validateWebhookURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid webhook URL: %w", err)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("webhook URL must use http or https scheme, got %q", u.Scheme)
+	}
+	return nil
+}
+
 // sendWebhook POSTs the report JSON to the given URL with a 10s timeout.
-func sendWebhook(url string, report watchReport) error {
+func sendWebhook(webhookURL string, report watchReport) error {
 	data, err := json.Marshal(report)
 	if err != nil {
 		return fmt.Errorf("marshal webhook payload: %w", err)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(data))
+	resp, err := client.Post(webhookURL, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("POST webhook: %w", err)
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("webhook returned %d", resp.StatusCode)
+	}
 	if !quiet {
-		fmt.Printf("Webhook sent: %s (status %d)\n", url, resp.StatusCode)
+		fmt.Printf("Webhook sent: %s (status %d)\n", webhookURL, resp.StatusCode)
 	}
 	return nil
 }

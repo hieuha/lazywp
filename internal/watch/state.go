@@ -48,9 +48,11 @@ func LoadState(path string) (WatchState, error) {
 	return state, nil
 }
 
-// SaveState writes the state to disk with indented JSON.
+// SaveState atomically writes the state to disk with indented JSON.
+// Uses write-to-temp + rename to prevent corruption on crash.
 func SaveState(path string, state WatchState) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create state dir: %w", err)
 	}
 
@@ -59,8 +61,24 @@ func SaveState(path string, state WatchState) error {
 		return fmt.Errorf("marshal state: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write state file: %w", err)
+	tmp, err := os.CreateTemp(dir, ".watch-state-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp state file: %w", err)
+	}
+	tmpPath := tmp.Name()
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("write temp state file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("close temp state file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("rename state file: %w", err)
 	}
 	return nil
 }
