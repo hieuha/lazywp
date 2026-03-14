@@ -87,7 +87,7 @@ downloads/
 cache/
 
 # Go
-lazywp
+/lazywp
 *.exe
 *.test
 *.out
