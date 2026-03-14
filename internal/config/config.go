@@ -25,6 +25,7 @@ type Config struct {
 	RetryMax       int                `yaml:"retry_max"`
 	RetryBaseDelay string             `yaml:"retry_base_delay"`
 	TitleMaxLen    int                `yaml:"title_max_len"`
+	PDAPIKey       string             `yaml:"projectdiscovery_api_key,omitempty"`
 }
 
 // DefaultConfig returns config with sensible defaults.
