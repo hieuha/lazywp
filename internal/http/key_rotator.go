@@ -52,6 +52,15 @@ func (kr *KeyRotator) UpdateQuota(key string, remaining int) {
 	kr.remaining[key] = remaining
 }
 
+// AllKeys returns a copy of all configured API keys.
+func (kr *KeyRotator) AllKeys() []string {
+	kr.mu.Lock()
+	defer kr.mu.Unlock()
+	out := make([]string, len(kr.keys))
+	copy(out, kr.keys)
+	return out
+}
+
 // AllExhausted returns true if all keys have zero remaining quota.
 func (kr *KeyRotator) AllExhausted() bool {
 	kr.mu.Lock()
