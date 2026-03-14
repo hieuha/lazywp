@@ -342,12 +342,17 @@ func printScanTable(vulnerable, safe []ScanResult) {
 				if fixed == "" {
 					fixed = "unfixed"
 				}
-				fmt.Printf("  #%-3d %-18s  CVSS:%s  %-8s  %s (fixed: %s)%s\n",
+				affected := v.AffectedVersions
+				if affected == "" {
+					affected = "all"
+				}
+				fmt.Printf("  #%-3d %-18s  CVSS:%s  %-8s  %s (affected: %s, fixed: %s)%s\n",
 					i+1,
 					cve,
 					colorCVSS(v.CVSS),
 					v.Type,
 					vulnTitle(v.Title),
+					affected,
 					fixed,
 					exploitCVELabel(r, v.CVE),
 				)
@@ -398,6 +403,7 @@ func flattenScanResults(results []ScanResult) ([]string, [][]string) {
 			fixed := v.FixedIn
 			if fixed == "" {
 				fixed = "unfixed"
+			
 			}
 			hasPOC, isKEV, epss, hasNuclei := "", "", "", ""
 			if info, ok := r.ExploitData[v.CVE]; ok {
