@@ -30,7 +30,7 @@ type ItemInfo struct {
 	Version             string            `json:"version"`
 	Author              string            `json:"author"`
 	DownloadLink        string            `json:"download_link"`
-	ActiveInstallations int               `json:"active_installations"`
+	ActiveInstallations int               `json:"active_installs"`
 	Downloaded          int               `json:"downloaded"`
 	Rating              float64           `json:"rating"`
 	TestedUpTo          string            `json:"tested"`
