@@ -182,9 +182,12 @@ func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType
 	return result, nil
 }
 
+// BatchProgressFunc is called after each download completes with slug@version.
+type BatchProgressFunc func(slug, version string)
+
 // DownloadBatch concurrently downloads multiple items using a semaphore worker pool.
 // Context cancellation triggers graceful shutdown — in-flight downloads complete first.
-func (e *Engine) DownloadBatch(ctx context.Context, jobs []DownloadJob) *BatchResult {
+func (e *Engine) DownloadBatch(ctx context.Context, jobs []DownloadJob, onProgress ...BatchProgressFunc) *BatchResult {
 	start := time.Now()
 	result := &BatchResult{Total: len(jobs)}
 
@@ -214,9 +217,7 @@ func (e *Engine) DownloadBatch(ctx context.Context, jobs []DownloadJob) *BatchRe
 
 			if errors.Is(err, ErrAlreadyExists) {
 				result.Skipped++
-				return
-			}
-			if err != nil {
+			} else if err != nil {
 				result.Failed++
 				errEntry := storage.ErrorEntry{
 					Slug:    j.Slug,
@@ -228,6 +229,9 @@ func (e *Engine) DownloadBatch(ctx context.Context, jobs []DownloadJob) *BatchRe
 				_ = e.storage.LogError(errEntry)
 			} else {
 				result.Succeeded++
+			}
+			if len(onProgress) > 0 && onProgress[0] != nil {
+				onProgress[0](j.Slug, j.Version)
 			}
 		}(job)
 	}

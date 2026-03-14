@@ -11,7 +11,6 @@ import (
 
 	"github.com/hieuha/lazywp/internal/client"
 	"github.com/hieuha/lazywp/internal/downloader"
-	"github.com/hieuha/lazywp/internal/scanner"
 	"github.com/hieuha/lazywp/internal/storage"
 	"github.com/spf13/cobra"
 )
@@ -119,7 +118,9 @@ func runVulnBySlug(ctx context.Context) error {
 	}
 	defer closer()
 
+	stop := startSpinner("Fetching vulnerabilities...", outputFmt != "table")
 	vulns, warnings := appDeps.VulnAgg.FetchForSlug(ctx, vulnSlug, appDeps.ItemType)
+	stop()
 	if outputFmt == "table" {
 		for _, w := range warnings {
 			fmt.Printf("warning: %s\n", w)
@@ -162,10 +163,17 @@ func runVulnBySlug(ctx context.Context) error {
 
 	if vulnDownload {
 		ctx2 := context.Background()
-		ver := maxAffectedVersion(vulns)
-		jobs := []downloader.DownloadJob{{Slug: vulnSlug, Version: ver, ItemType: appDeps.ItemType, Force: forceDown}}
-		result := appDeps.Engine.DownloadBatch(ctx2, jobs)
-		printBatchResult(result)
+		versions := uniqueMaxAffectedVersions(vulns)
+		if len(versions) == 0 {
+			fmt.Println("\nNo affected versions to download.")
+		} else {
+			jobs := make([]downloader.DownloadJob, len(versions))
+			for i, ver := range versions {
+				jobs[i] = downloader.DownloadJob{Slug: vulnSlug, Version: ver, ItemType: appDeps.ItemType, Force: forceDown}
+			}
+			result := downloadWithProgress(ctx2, jobs)
+			printBatchResult(result)
+		}
 	}
 	return nil
 }
@@ -187,7 +195,9 @@ func runVulnTop(ctx context.Context) error {
 		Year:       vulnYear,
 	}
 
+	stop := startSpinner("Fetching vulnerabilities...", outputFmt != "table")
 	items, err := appDeps.WFClient.FetchVulnPlugins(ctx, filters, vulnTop)
+	stop()
 	if err != nil {
 		return fmt.Errorf("fetch vuln plugins: %w", err)
 	}
@@ -242,12 +252,11 @@ func runVulnTop(ctx context.Context) error {
 					if fixed == "" {
 						fixed = "unfixed"
 					}
-					fmt.Printf("  %-18s  CVSS:%-4s  %-8s  %s  (affected: %s, min: %s, max: %s, fixed: %s)\n",
+					fmt.Printf("  %-18s  CVSS:%-4s  %-8s  %s  (affected min: %s, max: %s, fixed: %s)\n",
 						cve,
 						strconv.FormatFloat(v.CVSS, 'f', 1, 64),
 						v.Type,
 						vulnTitle(v.Title),
-						v.AffectedVersions,
 						v.MinAffectedVersion,
 						v.MaxAffectedVersion,
 						fixed,
@@ -259,13 +268,18 @@ func runVulnTop(ctx context.Context) error {
 	}
 
 	if vulnDownload {
-		jobs := make([]downloader.DownloadJob, len(items))
-		for i, it := range items {
-			ver := maxAffectedVersion(it.Vulns)
-			jobs[i] = downloader.DownloadJob{Slug: it.Slug, Version: ver, ItemType: appDeps.ItemType, Force: forceDown}
+		var jobs []downloader.DownloadJob
+		for _, it := range items {
+			for _, ver := range uniqueMaxAffectedVersions(it.Vulns) {
+				jobs = append(jobs, downloader.DownloadJob{Slug: it.Slug, Version: ver, ItemType: appDeps.ItemType, Force: forceDown})
+			}
 		}
-		result := appDeps.Engine.DownloadBatch(ctx, jobs)
-		printBatchResult(result)
+		if len(jobs) == 0 {
+			fmt.Println("\nNo affected versions to download.")
+		} else {
+			result := downloadWithProgress(ctx, jobs)
+			printBatchResult(result)
+		}
 	}
 	return nil
 }
@@ -322,7 +336,7 @@ func runVulnBatch(ctx context.Context) error {
 					if fixed == "" {
 						fixed = "unfixed"
 					}
-					fmt.Printf("  %d. %-18s  CVSS:%s  %s  (min: %s, max: %s, fixed: %s)\n",
+					fmt.Printf("  %d. %-18s  CVSS:%s  %s  (affected min: %s, max: %s, fixed: %s)\n",
 						j+1, cve, colorCVSS(v.CVSS), vulnTitle(v.Title), v.MinAffectedVersion, v.MaxAffectedVersion, fixed)
 				}
 			}
@@ -361,12 +375,13 @@ func runVulnBatch(ctx context.Context) error {
 				vulnMap[r.Slug] = r.Vulns
 			}
 		}
-		jobs := make([]downloader.DownloadJob, len(downloadSlugs))
-		for i, s := range downloadSlugs {
-			ver := maxAffectedVersion(vulnMap[s])
-			jobs[i] = downloader.DownloadJob{Slug: s, Version: ver, ItemType: appDeps.ItemType, Force: forceDown}
+		var jobs []downloader.DownloadJob
+		for _, s := range downloadSlugs {
+			for _, ver := range uniqueMaxAffectedVersions(vulnMap[s]) {
+				jobs = append(jobs, downloader.DownloadJob{Slug: s, Version: ver, ItemType: appDeps.ItemType, Force: forceDown})
+			}
 		}
-		result := appDeps.Engine.DownloadBatch(ctx, jobs)
+		result := downloadWithProgress(ctx, jobs)
 		printBatchResult(result)
 	}
 	return nil
@@ -433,18 +448,34 @@ func flattenVulnRows(flat []flatVuln) ([]string, [][]string) {
 	return headers, rows
 }
 
-// maxAffectedVersion returns the highest MaxAffectedVersion across all vulns.
-func maxAffectedVersion(vulns []storage.Vulnerability) string {
-	var best string
+// uniqueMaxAffectedVersions returns deduplicated max affected versions across all vulns,
+// skipping empty and wildcard values.
+func uniqueMaxAffectedVersions(vulns []storage.Vulnerability) []string {
+	seen := make(map[string]struct{})
+	var versions []string
 	for _, v := range vulns {
-		if v.MaxAffectedVersion == "" {
+		ver := v.MaxAffectedVersion
+		if ver == "" || ver == "*" {
 			continue
 		}
-		if best == "" || scanner.CompareVersions(v.MaxAffectedVersion, best) > 0 {
-			best = v.MaxAffectedVersion
+		if _, ok := seen[ver]; !ok {
+			seen[ver] = struct{}{}
+			versions = append(versions, ver)
 		}
 	}
-	return best
+	return versions
+}
+
+// downloadWithProgress downloads jobs with a progress bar showing current item.
+func downloadWithProgress(ctx context.Context, jobs []downloader.DownloadJob) *downloader.BatchResult {
+	fmt.Println()
+	progress := newScanProgress(len(jobs), "Downloading", outputFmt != "table")
+	onDone := func(slug, version string) {
+		progress.update(fmt.Sprintf("%s@%s", slug, version))
+	}
+	result := appDeps.Engine.DownloadBatch(ctx, jobs, onDone)
+	progress.finish()
+	return result
 }
 
 // readSlugListFile reads a file of slugs (one per line, # comments allowed).

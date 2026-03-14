@@ -41,7 +41,7 @@ func (sp *scanProgress) update(currentItem string) {
 	}
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
-	desc := fmt.Sprintf("%s > %-20s", sp.label, truncateSlug(currentItem, 20))
+	desc := fmt.Sprintf("%s > %-40s", sp.label, truncateSlug(currentItem, 40))
 	sp.bar.Describe(desc)
 	_ = sp.bar.Add(1)
 }

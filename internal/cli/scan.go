@@ -342,17 +342,12 @@ func printScanTable(vulnerable, safe []ScanResult) {
 				if fixed == "" {
 					fixed = "unfixed"
 				}
-				affected := v.AffectedVersions
-				if affected == "" {
-					affected = "all"
-				}
-				fmt.Printf("  #%-3d %-18s  CVSS:%s  %-8s  %s (affected: %s, min: %s, max: %s, fixed: %s)%s\n",
+				fmt.Printf("  #%-3d %-18s  CVSS:%s  %-8s  %s (affected min: %s, max: %s, fixed: %s)%s\n",
 					i+1,
 					cve,
 					colorCVSS(v.CVSS),
 					v.Type,
 					vulnTitle(v.Title),
-					affected,
 					v.MinAffectedVersion,
 					v.MaxAffectedVersion,
 					fixed,

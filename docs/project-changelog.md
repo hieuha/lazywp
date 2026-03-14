@@ -2,6 +2,21 @@
 
 All notable changes to lazywp are documented here.
 
+## [0.7.6] - 2026-03-14
+
+### Added
+- Progress bars for `vuln --download`, `extract`, and `vuln --top` fetch operations (replaces verbose per-item print output)
+- `--download` now downloads all unique max affected versions per CVE (deduplicated), not just the single highest
+- Spinner animation during vulnerability data fetch
+- `BatchProgressFunc` callback support in `DownloadBatch` for progress tracking
+
+### Changed
+- Detail output format: `(affected: X, min: Y, max: Z)` → `(affected min: Y, max: Z, fixed: W)`
+- Progress bar label width increased from 20 to 40 chars for full `slug@version` display
+
+### Fixed
+- `minFromVersion` / `maxToVersion` now return `*` instead of empty string when all affected ranges use wildcard `from_version`
+
 ## [0.7.5] - 2026-03-14
 
 ### Fixed

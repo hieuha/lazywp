@@ -494,17 +494,25 @@ func firstPatchedVersion(software []wfSoftware, slug string) string {
 // maxToVersion returns the highest to_version across all affected ranges for a slug.
 func maxToVersion(software []wfSoftware, slug string) string {
 	var best string
+	var hasWildcard bool
 	for _, sw := range software {
 		if slug != "" && sw.Slug != slug {
 			continue
 		}
 		for _, vr := range sw.AffectedVersions {
-			if vr.ToVersion != "" && vr.ToVersion != "*" {
+			if vr.ToVersion == "*" {
+				hasWildcard = true
+				continue
+			}
+			if vr.ToVersion != "" {
 				if best == "" || compareVersionParts(vr.ToVersion, best) > 0 {
 					best = vr.ToVersion
 				}
 			}
 		}
+	}
+	if best == "" && hasWildcard {
+		return "*"
 	}
 	return best
 }
@@ -512,17 +520,25 @@ func maxToVersion(software []wfSoftware, slug string) string {
 // minFromVersion returns the lowest from_version across all affected ranges for a slug.
 func minFromVersion(software []wfSoftware, slug string) string {
 	var best string
+	var hasWildcard bool
 	for _, sw := range software {
 		if slug != "" && sw.Slug != slug {
 			continue
 		}
 		for _, vr := range sw.AffectedVersions {
-			if vr.FromVersion != "" && vr.FromVersion != "*" {
+			if vr.FromVersion == "*" {
+				hasWildcard = true
+				continue
+			}
+			if vr.FromVersion != "" {
 				if best == "" || compareVersionParts(vr.FromVersion, best) < 0 {
 					best = vr.FromVersion
 				}
 			}
 		}
+	}
+	if best == "" && hasWildcard {
+		return "*"
 	}
 	return best
 }

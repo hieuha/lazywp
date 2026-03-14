@@ -82,15 +82,20 @@ func runExtract(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Count total extractions for progress bar
+	totalExtractions := countExtractions(typeName, targets, sourceBase)
+	progress := newScanProgress(totalExtractions, "Extracting", quiet)
+
 	var succeeded, failed int
 	for _, t := range targets {
-		if err := extractTarget_run(typeName, t, destDir, sourceBase); err != nil {
+		if err := extractTarget_run(typeName, t, destDir, sourceBase, progress); err != nil {
 			fmt.Fprintf(os.Stderr, "  ERROR %s: %s\n", formatTarget(t), err)
 			failed++
 		} else {
 			succeeded++
 		}
 	}
+	progress.finish()
 
 	if !quiet {
 		fmt.Printf("\nExtract complete: %d succeeded, %d failed (out of %d)\n", succeeded, failed, len(targets))
@@ -177,10 +182,37 @@ func discoverDownloadedSlugs(typeName, sourceBase string) ([]string, error) {
 	return slugs, nil
 }
 
+// countExtractions counts total zip files to extract for progress bar sizing.
+func countExtractions(typeName string, targets []extractTarget, sourceBase string) int {
+	total := 0
+	for _, t := range targets {
+		slugDir := filepath.Join(sourceBase, typeName, t.Slug)
+		if t.Version != "" {
+			zipPath := filepath.Join(slugDir, t.Version, t.Slug+".zip")
+			if _, err := os.Stat(zipPath); err == nil {
+				total++
+			}
+			continue
+		}
+		versions, err := os.ReadDir(slugDir)
+		if err != nil {
+			continue
+		}
+		for _, v := range versions {
+			if !v.IsDir() {
+				continue
+			}
+			zipPath := filepath.Join(slugDir, v.Name(), t.Slug+".zip")
+			if _, err := os.Stat(zipPath); err == nil {
+				total++
+			}
+		}
+	}
+	return total
+}
+
 // extractTarget_run extracts zip(s) for a single target.
-// If target.Version is set, only that version is extracted.
-// Otherwise, all versions are extracted.
-func extractTarget_run(typeName string, t extractTarget, destDir, sourceBase string) error {
+func extractTarget_run(typeName string, t extractTarget, destDir, sourceBase string, progress *scanProgress) error {
 	slugDir := filepath.Join(sourceBase, typeName, t.Slug)
 
 	// Single version mode
@@ -190,9 +222,7 @@ func extractTarget_run(typeName string, t extractTarget, destDir, sourceBase str
 			return fmt.Errorf("%s@%s not found", t.Slug, t.Version)
 		}
 		extractDest := filepath.Join(destDir, t.Slug, t.Version)
-		if !quiet {
-			fmt.Printf("  Extracting %s@%s...\n", t.Slug, t.Version)
-		}
+		progress.update(fmt.Sprintf("%s@%s", t.Slug, t.Version))
 		return extractor.Extract(zipPath, extractDest)
 	}
 
@@ -213,9 +243,7 @@ func extractTarget_run(typeName string, t extractTarget, destDir, sourceBase str
 		}
 
 		extractDest := filepath.Join(destDir, t.Slug, v.Name())
-		if !quiet {
-			fmt.Printf("  Extracting %s@%s...\n", t.Slug, v.Name())
-		}
+		progress.update(fmt.Sprintf("%s@%s", t.Slug, v.Name()))
 		if err := extractor.Extract(zipPath, extractDest); err != nil {
 			return fmt.Errorf("extract %s@%s: %w", t.Slug, v.Name(), err)
 		}
