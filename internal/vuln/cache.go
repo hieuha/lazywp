@@ -13,6 +13,7 @@ import (
 type Cache struct {
 	baseDir    string
 	defaultTTL time.Duration
+	disabled   bool
 }
 
 // NewCache creates a Cache that stores files under baseDir with the given TTL.
@@ -26,9 +27,16 @@ func (c *Cache) keyToFilename(source, key string) string {
 	return filepath.Join(c.baseDir, source, fmt.Sprintf("%x.json", sum))
 }
 
+// SetDisabled toggles cache reads. When disabled, Get always returns miss
+// but Set still writes (so fresh API data is cached for future use).
+func (c *Cache) SetDisabled(disabled bool) { c.disabled = disabled }
+
 // Get retrieves cached data for (source, key) if it exists and is within TTL.
 // Returns (data, true) on hit, (nil, false) on miss or expiry.
 func (c *Cache) Get(source, key string) ([]byte, bool) {
+	if c.disabled {
+		return nil, false
+	}
 	path := c.keyToFilename(source, key)
 	info, err := os.Stat(path)
 	if err != nil {

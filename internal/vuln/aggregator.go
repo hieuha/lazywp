@@ -38,10 +38,24 @@ type sourceResult struct {
 // Returns merged deduplicated vulnerabilities sorted by CVSS descending, plus
 // non-fatal warning strings for any sources that returned errors.
 func (a *Aggregator) FetchForSlug(ctx context.Context, slug string, itemType storage.ItemType) ([]storage.Vulnerability, []string) {
-	results := make(chan sourceResult, len(a.sources))
+	return a.FetchForSlugExcluding(ctx, slug, itemType, nil)
+}
+
+// FetchForSlugExcluding is like FetchForSlug but skips sources in the exclude set.
+// This allows callers to disable sources that have returned persistent errors (e.g. missing API keys).
+func (a *Aggregator) FetchForSlugExcluding(ctx context.Context, slug string, itemType storage.ItemType, exclude map[string]bool) ([]storage.Vulnerability, []string) {
+	var activeSources []VulnSource
+	for _, src := range a.sources {
+		if exclude != nil && exclude[src.Name()] {
+			continue
+		}
+		activeSources = append(activeSources, src)
+	}
+
+	results := make(chan sourceResult, len(activeSources))
 
 	var wg sync.WaitGroup
-	for _, src := range a.sources {
+	for _, src := range activeSources {
 		wg.Add(1)
 		go func(s VulnSource) {
 			defer wg.Done()
@@ -50,7 +64,6 @@ func (a *Aggregator) FetchForSlug(ctx context.Context, slug string, itemType sto
 		}(src)
 	}
 
-	// Close channel once all goroutines finish
 	go func() {
 		wg.Wait()
 		close(results)

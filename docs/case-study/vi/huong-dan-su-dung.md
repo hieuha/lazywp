@@ -113,7 +113,75 @@ lazywp vuln --slug contest-gallery --download
 
 ---
 
-## 5. Xuất Dữ Liệu Để Báo Cáo
+## 5. Quét Lỗ Hổng Trên Thư Mục Plugin/Theme Cục Bộ
+
+Tính năng `scan` cho phép quét một thư mục chứa plugin hoặc theme WordPress đã cài, phát hiện slug + phiên bản, rồi đối chiếu với cơ sở dữ liệu lỗ hổng.
+
+### Quét thư mục plugins
+
+```bash
+lazywp scan /var/www/html/wp-content/plugins -t plugin
+```
+
+### Quét thư mục themes
+
+```bash
+lazywp scan /var/www/html/wp-content/themes -t theme
+```
+
+Kết quả mẫu:
+
+```
+Scanning: /var/www/html/wp-content/plugins (12 plugins found)
+
+  3 plugins found in cache, 9 need API lookup
+
+contact-form-7                  12/12 [==============================] 100%
+
+VULNERABLE (2):
+  contact-form-7@6.1.2           2 CVEs (max CVSS 9.8, fixed in 6.1.5)
+  elementor@3.20.0               1 CVE  (CVSS 7.5, fixed in 3.21.0)
+
+SAFE (10):
+  akismet@5.3.1                  0 CVEs
+  ...
+
+Summary: 12 scanned, 2 vulnerable, 10 safe
+```
+
+### Chỉ quét từ một nguồn
+
+```bash
+lazywp scan ./plugins -t plugin --source wordfence
+```
+
+### Bỏ qua cache, ép truy vấn trực tuyến
+
+```bash
+lazywp scan ./plugins -t plugin --no-cache
+```
+
+Khi dùng `--no-cache`, dữ liệu vẫn được lưu cache cho lần quét sau.
+
+### Xuất kết quả quét
+
+```bash
+lazywp scan ./plugins -t plugin -f json > ket-qua-quet.json
+lazywp scan ./plugins -t plugin -f csv > ket-qua-quet.csv
+```
+
+### Cách phát hiện phiên bản
+
+- **Plugin**: Đọc `readme.txt` (Stable tag), nếu không có thì quét header `Version:` trong file `.php`
+- **Theme**: Đọc header `Version:` trong `style.css`, nếu không có thì thử `readme.txt`
+
+### Tự động tắt nguồn lỗi
+
+Nếu một nguồn (vd: WPScan) trả lỗi thiếu API key, nguồn đó sẽ tự động bị tắt cho các plugin còn lại để tránh lặp lỗi.
+
+---
+
+## 6. Xuất Dữ Liệu Để Báo Cáo
 
 ### Xuất JSON để xử lý bằng script
 
@@ -138,7 +206,7 @@ lazywp vuln --slug akismet -f json | jq '[.[] | select(.cvss >= 7.0)]'
 
 ---
 
-## 6. Quản Lý Cache
+## 7. Quản Lý Cache
 
 ### Xem trạng thái cache
 
@@ -172,7 +240,7 @@ lazywp cache clear  # xóa tất cả
 
 ---
 
-## 7. Làm Việc Với Theme
+## 8. Làm Việc Với Theme
 
 Tất cả lệnh đều hỗ trợ theme qua `--type theme` (`-t theme`):
 
@@ -184,7 +252,7 @@ lazywp vuln --slug flavor -t theme
 
 ---
 
-## 8. Cấu Hình
+## 9. Cấu Hình
 
 ### Khởi tạo config
 
@@ -215,7 +283,7 @@ lazywp --config /đường-dẫn/config.yaml vuln --top 10
 
 ---
 
-## 9. Xoay Nhiều API Key Tự Động
+## 10. Xoay Nhiều API Key Tự Động
 
 Cấu hình nhiều API key để tự động xoay khi bị giới hạn:
 

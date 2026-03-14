@@ -5,6 +5,7 @@ A high-performance CLI tool for security researchers to bulk-download WordPress 
 ## Features
 
 - **Bulk Downloads**: Download multiple WordPress plugins and themes in parallel
+- **Local Scan**: Scan local plugin/theme directories, detect versions, and check for vulnerabilities
 - **Vulnerability Scanning**: Cross-reference against WPScan, NVD, and Wordfence databases
 - **Multi-Key Rotation**: Automatic API key rotation with auto-retry on 429/401
 - **Resume Support**: Resume interrupted downloads from where they stopped
@@ -78,6 +79,15 @@ lazywp vuln --top 10 --cwe-type xss --download
 # Output formats
 lazywp vuln --slug akismet -f json
 lazywp vuln --top 5 --detail -f json
+```
+
+### Scan Local Directory
+
+```bash
+lazywp scan /path/to/wp-content/plugins -t plugin
+lazywp scan /path/to/wp-content/themes -t theme
+lazywp scan ./plugins -t plugin --source wordfence
+lazywp scan ./plugins -t plugin --no-cache          # force online lookup
 ```
 
 ### Cache Management
