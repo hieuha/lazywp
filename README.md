@@ -170,6 +170,15 @@ lazywp convert scan.json --status vulnerable -f csv -o vulnerable.csv
 | `-o` | Write output to file (default: stdout) |
 | `--detail` | Show full CVE list (table format) |
 
+### Generate HTML Report
+
+```bash
+lazywp report scan.json
+lazywp report scan.json -o report.html
+```
+
+Generates a self-contained HTML report with severity charts, executive summary, exploit intelligence, and detailed CVE findings.
+
 ### SARIF Output (CI/CD Integration)
 
 ```bash

@@ -25,11 +25,11 @@
 - [x] Per-slug colored output with summary
 - [x] `--download` flag to download vulnerable plugins
 
-### 2.3 Report Generation
-- `lazywp report <scan.json>` — generate formatted vulnerability reports
-- HTML output with severity charts and executive summary
-- Optional PDF export (via wkhtmltopdf or similar)
-- Include exploit data, CVSS distribution, remediation suggestions
+### 2.3 Report Generation (COMPLETE)
+- [x] `lazywp report <scan.json>` — generate formatted vulnerability reports
+- [x] HTML output with severity charts and executive summary
+- [x] Include exploit data, CVSS distribution, detailed findings
+- [ ] Optional PDF export (via wkhtmltopdf or similar) — future enhancement
 
 ### 2.4 SARIF Output (COMPLETE)
 - [x] `-f sarif` output format for scan and vuln commands
