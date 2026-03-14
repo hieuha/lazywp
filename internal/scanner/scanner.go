@@ -27,6 +27,10 @@ var stableTagRe = regexp.MustCompile(`(?i)^Stable\s+tag:\s*(.+)`)
 // Detection strategy differs by item type:
 //   - plugin: readme.txt "Stable tag" → .php header "Version:"
 //   - theme:  style.css header "Version:" → readme.txt "Stable tag"
+//
+// Supports both flat layout (slug/readme.txt) and lazywp extract layout
+// (slug/version/slug/readme.txt). When the extract layout is detected,
+// each version is scanned as a separate entry.
 func ScanDirectory(dir string, itemType storage.ItemType) ([]ScannedPlugin, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -42,6 +46,14 @@ func ScanDirectory(dir string, itemType storage.ItemType) ([]ScannedPlugin, erro
 		slug := entry.Name()
 		itemDir := filepath.Join(dir, slug)
 
+		// Check for lazywp extract layout: slug/<version>/slug/...
+		extracted := resolveExtractedVersions(itemDir, slug, itemType)
+		if len(extracted) > 0 {
+			items = append(items, extracted...)
+			continue
+		}
+
+		// Standard flat layout: slug/readme.txt
 		var version string
 		if itemType == storage.ItemTypeTheme {
 			version = detectThemeVersion(itemDir)
@@ -57,6 +69,47 @@ func ScanDirectory(dir string, itemType storage.ItemType) ([]ScannedPlugin, erro
 	}
 
 	return items, nil
+}
+
+// resolveExtractedVersions detects the lazywp extract layout (slug/<version>/slug/)
+// and returns ScannedPlugin entries for each version found.
+func resolveExtractedVersions(slugDir, slug string, itemType storage.ItemType) []ScannedPlugin {
+	verEntries, err := os.ReadDir(slugDir)
+	if err != nil {
+		return nil
+	}
+
+	var results []ScannedPlugin
+	for _, ve := range verEntries {
+		if !ve.IsDir() {
+			continue
+		}
+		verName := ve.Name()
+		// Check if this version dir contains a nested slug dir (extract layout)
+		nested := filepath.Join(slugDir, verName, slug)
+		info, err := os.Stat(nested)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+
+		var version string
+		if itemType == storage.ItemTypeTheme {
+			version = detectThemeVersion(nested)
+		} else {
+			version = detectPluginVersion(nested)
+		}
+		// Use the directory name as version if detection fails
+		if version == "" {
+			version = verName
+		}
+
+		results = append(results, ScannedPlugin{
+			Slug:    slug,
+			Version: version,
+			Path:    nested,
+		})
+	}
+	return results
 }
 
 // detectPluginVersion tries readme.txt first, then falls back to PHP file headers.
