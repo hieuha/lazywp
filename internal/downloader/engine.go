@@ -25,6 +25,7 @@ type DownloadJob struct {
 	Slug     string
 	Version  string
 	ItemType client.ItemType
+	Force    bool
 }
 
 // BatchResult summarizes a batch download operation.
@@ -63,8 +64,9 @@ func NewEngine(
 
 // DownloadOne downloads a single plugin/theme version.
 // It skips if already present, fetches metadata, streams to disk, and writes metadata.json.
-func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType client.ItemType) error {
-	if e.storage.Exists(string(itemType), slug, version) {
+func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType client.ItemType, force ...bool) error {
+	isForce := len(force) > 0 && force[0]
+	if !isForce && e.storage.Exists(string(itemType), slug, version) {
 		return nil // already downloaded, skip silently
 	}
 
@@ -81,6 +83,12 @@ func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType
 	}
 
 	downloadURL := e.wpClient.DownloadURL(slug, effectiveVersion)
+
+	// Verify download URL is reachable before setting up directories
+	if available, reason := e.checkDownloadURL(ctx, downloadURL, slug, effectiveVersion); !available {
+		return fmt.Errorf("skip %s@%s: %s", slug, effectiveVersion, reason)
+	}
+
 	destDir := e.storage.ItemDir(string(itemType), slug, effectiveVersion)
 
 	if err = os.MkdirAll(destDir, 0755); err != nil {
@@ -183,14 +191,14 @@ func (e *Engine) DownloadBatch(ctx context.Context, jobs []DownloadJob) *BatchRe
 			defer func() { <-sem }() // release slot
 
 			// Already exists check for quick skipping
-			if e.storage.Exists(string(j.ItemType), j.Slug, j.Version) {
+			if !j.Force && e.storage.Exists(string(j.ItemType), j.Slug, j.Version) {
 				e.mu.Lock()
 				result.Skipped++
 				e.mu.Unlock()
 				return
 			}
 
-			err := e.DownloadOne(ctx, j.Slug, j.Version, j.ItemType)
+			err := e.DownloadOne(ctx, j.Slug, j.Version, j.ItemType, j.Force)
 			e.mu.Lock()
 			defer e.mu.Unlock()
 
@@ -213,6 +221,28 @@ func (e *Engine) DownloadBatch(ctx context.Context, jobs []DownloadJob) *BatchRe
 	wg.Wait()
 	result.Duration = time.Since(start)
 	return result
+}
+
+// checkDownloadURL does a HEAD request to verify the download URL exists.
+// Returns (true, "") if available, or (false, reason) if not.
+func (e *Engine) checkDownloadURL(ctx context.Context, url, slug, version string) (bool, string) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return false, fmt.Sprintf("create request: %v", err)
+	}
+	resp, err := e.httpClient.Do(ctx, req)
+	if err != nil {
+		return false, fmt.Sprintf("network error: %v", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return true, ""
+	}
+	if resp.StatusCode == 404 {
+		return false, fmt.Sprintf("version %s not available on wordpress.org (404)", version)
+	}
+	return false, fmt.Sprintf("unexpected status %d", resp.StatusCode)
 }
 
 // downloadFile streams a URL to destPath with optional resume via HTTP Range header.

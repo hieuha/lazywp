@@ -37,15 +37,15 @@ func runTop(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("browse %s: %w", topBrowse, err)
 	}
 
-	headers := []string{"#", "Slug", "Name", "Active Installs", "Version"}
+	headers := []string{"#", "Slug", "Version", "Name", "Active Installs"}
 	rows := make([][]string, len(items))
 	for i, item := range items {
 		rows[i] = []string{
 			strconv.Itoa(i + 1),
 			item.Slug,
-			item.Name,
-			strconv.Itoa(item.ActiveInstallations),
 			item.Version,
+			item.Name,
+			formatNumber(item.ActiveInstallations),
 		}
 	}
 	fmtr.Print(headers, rows, items)
@@ -57,6 +57,7 @@ func runTop(cmd *cobra.Command, args []string) error {
 				Slug:     item.Slug,
 				Version:  item.Version,
 				ItemType: appDeps.ItemType,
+				Force:    forceDown,
 			}
 		}
 		if !quiet {

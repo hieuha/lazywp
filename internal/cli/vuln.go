@@ -121,7 +121,7 @@ func runVulnBySlug(ctx context.Context) error {
 
 	if vulnDownload {
 		ctx2 := context.Background()
-		jobs := []downloader.DownloadJob{{Slug: vulnSlug, ItemType: appDeps.ItemType}}
+		jobs := []downloader.DownloadJob{{Slug: vulnSlug, ItemType: appDeps.ItemType, Force: forceDown}}
 		result := appDeps.Engine.DownloadBatch(ctx2, jobs)
 		printBatchResult(result)
 	}
@@ -200,7 +200,7 @@ func runVulnTop(ctx context.Context) error {
 	if vulnDownload {
 		jobs := make([]downloader.DownloadJob, len(items))
 		for i, it := range items {
-			jobs[i] = downloader.DownloadJob{Slug: it.Slug, ItemType: appDeps.ItemType}
+			jobs[i] = downloader.DownloadJob{Slug: it.Slug, ItemType: appDeps.ItemType, Force: forceDown}
 		}
 		result := appDeps.Engine.DownloadBatch(ctx, jobs)
 		printBatchResult(result)

@@ -91,6 +91,24 @@ func boolStr(b bool) string {
 	return "no"
 }
 
+// formatNumber formats an integer with human-readable suffixes (e.g. 10M, 500K).
+func formatNumber(n int) string {
+	switch {
+	case n >= 1_000_000:
+		if n%1_000_000 == 0 {
+			return fmt.Sprintf("%dM", n/1_000_000)
+		}
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	case n >= 1_000:
+		if n%1_000 == 0 {
+			return fmt.Sprintf("%dK", n/1_000)
+		}
+		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+	default:
+		return strconv.Itoa(n)
+	}
+}
+
 func formatBytes(n int64) string {
 	const unit = 1024
 	if n < unit {

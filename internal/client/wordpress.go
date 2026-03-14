@@ -47,6 +47,7 @@ func (wc *WordPressClient) GetInfo(ctx context.Context, slug string) (*ItemInfo,
 		return nil, fmt.Errorf("parse %s info: %w", wc.itemType, err)
 	}
 	info.Type = wc.itemType
+	info.DecodeNames()
 	return &info, nil
 }
 
@@ -93,6 +94,7 @@ func (wc *WordPressClient) Browse(ctx context.Context, category string, count in
 		items := br.Items()
 		for i := range items {
 			items[i].Type = wc.itemType
+			items[i].DecodeNames()
 		}
 		all = append(all, items...)
 
@@ -134,6 +136,7 @@ func (wc *WordPressClient) Search(ctx context.Context, query string, count int) 
 		items := br.Items()
 		for i := range items {
 			items[i].Type = wc.itemType
+			items[i].DecodeNames()
 		}
 		all = append(all, items...)
 

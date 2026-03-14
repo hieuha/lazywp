@@ -14,6 +14,7 @@ var (
 	outputFmt  string
 	configPath string
 	itemType   string
+	forceDown  bool
 )
 
 // package-level singletons set in PersistentPreRunE.
@@ -75,6 +76,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFmt, "format", "f", "table", "Output format: table|json|csv")
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Config file path (default: ./config.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&itemType, "type", "t", "plugin", "Resource type: plugin|theme")
+	rootCmd.PersistentFlags().BoolVar(&forceDown, "force", false, "Force re-download even if already exists")
 }
 
 // Execute runs the root command.

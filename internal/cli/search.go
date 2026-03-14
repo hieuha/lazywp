@@ -38,15 +38,15 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	headers := []string{"#", "Slug", "Name", "Version", "Active Installs", "Rating"}
+	headers := []string{"#", "Slug", "Version", "Name", "Active Installs", "Rating"}
 	rows := make([][]string, len(items))
 	for i, item := range items {
 		rows[i] = []string{
 			strconv.Itoa(i + 1),
 			item.Slug,
-			item.Name,
 			item.Version,
-			strconv.Itoa(item.ActiveInstallations),
+			item.Name,
+			formatNumber(item.ActiveInstallations),
 			strconv.FormatFloat(item.Rating, 'f', 1, 64),
 		}
 	}

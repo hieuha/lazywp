@@ -105,6 +105,7 @@ func readSlugList(path string) ([]downloader.DownloadJob, error) {
 			Slug:     strings.TrimSpace(slug),
 			Version:  strings.TrimSpace(version),
 			ItemType: appDeps.ItemType,
+			Force:    forceDown,
 		})
 	}
 	if err := scanner.Err(); err != nil {
@@ -118,7 +119,7 @@ func printBatchResult(r *downloader.BatchResult) {
 	fmt.Printf("\nBatch complete in %s\n", r.Duration.Round(1e6))
 	fmt.Printf("  Total:     %d\n", r.Total)
 	fmt.Printf("  Succeeded: %d\n", r.Succeeded)
-	fmt.Printf("  Skipped:   %d\n", r.Skipped)
+	fmt.Printf("  Existed:   %d\n", r.Skipped)
 	fmt.Printf("  Failed:    %d\n", r.Failed)
 	for _, e := range r.Errors {
 		fmt.Fprintf(os.Stderr, "  ERROR %s@%s: %s\n", e.Slug, e.Version, e.Error)

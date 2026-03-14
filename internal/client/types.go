@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 
 	"github.com/hieuha/lazywp/internal/storage"
 )
@@ -36,7 +37,7 @@ type ItemInfo struct {
 	TestedUpTo          string            `json:"tested"`
 	RequiresPHP         FlexString        `json:"requires_php"`
 	LastUpdated         string            `json:"last_updated"`
-	Versions            map[string]string `json:"versions"`
+	Versions            FlexVersions      `json:"versions"`
 	Homepage            string            `json:"homepage"`
 	Type                ItemType          `json:"-"`
 }
@@ -61,6 +62,26 @@ type PageInfo struct {
 	Page    int `json:"page"`
 	Pages   int `json:"pages"`
 	Results int `json:"results"`
+}
+
+// DecodeNames decodes HTML entities in Name and Author fields.
+func (info *ItemInfo) DecodeNames() {
+	info.Name = html.UnescapeString(info.Name)
+	info.Author = html.UnescapeString(info.Author)
+}
+
+// FlexVersions handles WordPress "versions" field that can be {} (object) or [] (empty array).
+type FlexVersions map[string]string
+
+func (fv *FlexVersions) UnmarshalJSON(data []byte) error {
+	var m map[string]string
+	if err := json.Unmarshal(data, &m); err == nil {
+		*fv = m
+		return nil
+	}
+	// WordPress returns [] for empty versions
+	*fv = nil
+	return nil
 }
 
 // FlexString handles WordPress API fields that can be string or bool (e.g. requires_php: false).
