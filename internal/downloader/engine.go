@@ -3,6 +3,7 @@ package downloader
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -62,18 +63,28 @@ func NewEngine(
 	}
 }
 
+// ErrAlreadyExists is returned when a plugin/theme version is already downloaded.
+var ErrAlreadyExists = fmt.Errorf("already exists")
+
+// DownloadResult holds the outcome of a single download operation.
+type DownloadResult struct {
+	Slug    string
+	Version string // resolved effective version
+}
+
 // DownloadOne downloads a single plugin/theme version.
 // It skips if already present, fetches metadata, streams to disk, and writes metadata.json.
-func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType client.ItemType, force ...bool) error {
+// Returns DownloadResult with the resolved version on success.
+func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType client.ItemType, force ...bool) (*DownloadResult, error) {
 	isForce := len(force) > 0 && force[0]
 	if !isForce && e.storage.Exists(string(itemType), slug, version) {
-		return nil // already downloaded, skip silently
+		return nil, ErrAlreadyExists
 	}
 
 	// Fetch WordPress metadata for this item
 	info, err := e.wpClient.GetInfo(ctx, slug)
 	if err != nil {
-		return fmt.Errorf("get info for %s: %w", slug, err)
+		return nil, fmt.Errorf("get info for %s: %w", slug, err)
 	}
 
 	// Resolve effective version
@@ -82,17 +93,19 @@ func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType
 		effectiveVersion = info.Version
 	}
 
+	result := &DownloadResult{Slug: slug, Version: effectiveVersion}
+
 	downloadURL := e.wpClient.DownloadURL(slug, effectiveVersion)
 
 	// Verify download URL is reachable before setting up directories
 	if available, reason := e.checkDownloadURL(ctx, downloadURL, slug, effectiveVersion); !available {
-		return fmt.Errorf("skip %s@%s: %s", slug, effectiveVersion, reason)
+		return nil, fmt.Errorf("skip %s@%s: %s", slug, effectiveVersion, reason)
 	}
 
 	destDir := e.storage.ItemDir(string(itemType), slug, effectiveVersion)
 
 	if err = os.MkdirAll(destDir, 0755); err != nil {
-		return fmt.Errorf("create dest dir: %w", err)
+		return nil, fmt.Errorf("create dest dir: %w", err)
 	}
 
 	// Check for existing resume state
@@ -121,7 +134,7 @@ func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType
 		// Persist failure state for future resume
 		state.LastUpdated = time.Now()
 		_ = SaveState(destDir, state)
-		return fmt.Errorf("download %s@%s: %w", slug, effectiveVersion, err)
+		return nil, fmt.Errorf("download %s@%s: %w", slug, effectiveVersion, err)
 	}
 
 	// Clear resume state on success
@@ -147,7 +160,7 @@ func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType
 	}
 
 	if err := e.storage.WriteMetadata(meta); err != nil {
-		return fmt.Errorf("write metadata for %s: %w", slug, err)
+		return nil, fmt.Errorf("write metadata for %s: %w", slug, err)
 	}
 
 	if err := e.storage.UpdateIndex(storage.IndexEntry{
@@ -158,10 +171,10 @@ func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType
 		HasVulns:     len(meta.Vulnerabilities) > 0,
 		FileSize:     bytesWritten,
 	}); err != nil {
-		return fmt.Errorf("update index for %s: %w", slug, err)
+		return nil, fmt.Errorf("update index for %s: %w", slug, err)
 	}
 
-	return nil
+	return result, nil
 }
 
 // DownloadBatch concurrently downloads multiple items using a semaphore worker pool.
@@ -190,18 +203,14 @@ func (e *Engine) DownloadBatch(ctx context.Context, jobs []DownloadJob) *BatchRe
 			defer wg.Done()
 			defer func() { <-sem }() // release slot
 
-			// Already exists check for quick skipping
-			if !j.Force && e.storage.Exists(string(j.ItemType), j.Slug, j.Version) {
-				e.mu.Lock()
-				result.Skipped++
-				e.mu.Unlock()
-				return
-			}
-
-			err := e.DownloadOne(ctx, j.Slug, j.Version, j.ItemType, j.Force)
+			_, err := e.DownloadOne(ctx, j.Slug, j.Version, j.ItemType, j.Force)
 			e.mu.Lock()
 			defer e.mu.Unlock()
 
+			if errors.Is(err, ErrAlreadyExists) {
+				result.Skipped++
+				return
+			}
 			if err != nil {
 				result.Failed++
 				errEntry := storage.ErrorEntry{

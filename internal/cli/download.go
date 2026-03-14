@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -57,12 +58,18 @@ func runDownloadSingle(ctx context.Context) error {
 	if !quiet {
 		fmt.Printf("Downloading %s %s...\n", appDeps.ItemType, dlSlug)
 	}
-	err := appDeps.Engine.DownloadOne(ctx, dlSlug, dlVersion, appDeps.ItemType)
+	result, err := appDeps.Engine.DownloadOne(ctx, dlSlug, dlVersion, appDeps.ItemType)
+	if errors.Is(err, downloader.ErrAlreadyExists) {
+		if !quiet {
+			fmt.Printf("Already exists: %s (use --force to re-download)\n", dlSlug)
+		}
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
 	if !quiet {
-		fmt.Printf("Done: %s\n", dlSlug)
+		fmt.Printf("Done: %s@%s\n", result.Slug, result.Version)
 	}
 	return nil
 }
