@@ -157,7 +157,7 @@ func (e *Engine) DownloadOne(ctx context.Context, slug, version string, itemType
 		DownloadedAt: time.Now(),
 		WPMetadata: storage.WPMetadata{
 			ActiveInstallations: info.ActiveInstallations,
-			TestedUpTo:          info.TestedUpTo,
+			TestedUpTo:          string(info.TestedUpTo),
 			RequiresPHP:         string(info.RequiresPHP),
 			Author:              info.Author,
 			LastUpdated:         info.LastUpdated,

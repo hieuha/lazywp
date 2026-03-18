@@ -34,7 +34,7 @@ type ItemInfo struct {
 	ActiveInstallations int               `json:"active_installs"`
 	Downloaded          int               `json:"downloaded"`
 	Rating              float64           `json:"rating"`
-	TestedUpTo          string            `json:"tested"`
+	TestedUpTo          FlexString        `json:"tested"`
 	RequiresPHP         FlexString        `json:"requires_php"`
 	LastUpdated         string            `json:"last_updated"`
 	Versions            FlexVersions      `json:"versions"`
