@@ -63,7 +63,7 @@ func runTop(cmd *cobra.Command, args []string) error {
 		if !quiet {
 			fmt.Printf("\nDownloading %d items...\n", len(jobs))
 		}
-		result := appDeps.Engine.DownloadBatch(ctx, jobs)
+		result := downloadWithProgress(ctx, jobs)
 		printBatchResult(result)
 	}
 

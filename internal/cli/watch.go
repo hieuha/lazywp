@@ -156,8 +156,11 @@ func runWatchOnce(slugs []string, statePath string) ([]watch.Change, error) {
 	}
 
 	var allChanges []watch.Change
+	progress := newScanProgress(len(slugs), "Checking", quiet)
 
 	for _, slug := range slugs {
+		progress.update(slug)
+
 		// Fetch current version from WordPress.org.
 		info, err := appDeps.WPClient.GetInfo(ctx, slug)
 		if err != nil {
@@ -193,6 +196,8 @@ func runWatchOnce(slugs []string, statePath string) ([]watch.Change, error) {
 			LastCheck: time.Now(),
 		}
 	}
+
+	progress.finish()
 
 	if err := watch.SaveState(statePath, state); err != nil {
 		return allChanges, fmt.Errorf("save state: %w", err)

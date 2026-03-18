@@ -91,7 +91,7 @@ func runDownloadList(ctx context.Context) error {
 		fmt.Printf("Downloading %d items...\n", len(jobs))
 	}
 
-	result := appDeps.Engine.DownloadBatch(ctx, jobs)
+	result := downloadWithProgress(ctx, jobs)
 	printBatchResult(result)
 	return nil
 }
