@@ -2,6 +2,24 @@
 
 All notable changes to lazywp are documented here.
 
+## [0.8.0] - 2026-03-27
+
+### Added
+- Show affected versions (min/max) in `scan --detail` CVE output
+- Extract min/max affected versions from Wordfence API response
+- Show min/max affected version in all table/CSV output paths
+- Progress bars for `top`, `download`, and `watch` commands
+- `--download` now downloads all unique affected versions per CVE (deduplicated)
+
+### Changed
+- Detail output format now shows `(affected min: Y, max: Z, fixed: W)`
+- Progress bar label width increased for full `slug@version` display
+
+### Fixed
+- `vuln --download` now downloads affected version instead of latest
+- `minFromVersion` / `maxToVersion` return `*` instead of empty string for wildcard ranges
+- Handle bool value in WordPress API `tested` field
+
 ## [0.7.6] - 2026-03-14
 
 ### Added

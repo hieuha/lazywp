@@ -4,8 +4,8 @@ A high-performance Go CLI tool for bulk downloading WordPress plugins/themes wit
 
 **Module:** github.com/hieuha/lazywp
 **Language:** Go 1.25.0
-**Version:** 0.7.2
-**Last Updated:** 2026-03-14
+**Version:** 0.8.0
+**Last Updated:** 2026-03-27
 
 ## Quick Navigation
 
