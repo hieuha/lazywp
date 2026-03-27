@@ -192,6 +192,72 @@ func TestRetryBaseDelayDuration(t *testing.T) {
 	}
 }
 
+func TestEffectiveNVDKeys(t *testing.T) {
+	cfg := &Config{NVDKeys: []string{"key1"}}
+	if got := cfg.EffectiveNVDKeys(); len(got) != 1 || got[0] != "key1" {
+		t.Errorf("expected [key1], got %v", got)
+	}
+
+	cfg2 := &Config{}
+	if got := cfg2.EffectiveNVDKeys(); got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
+func TestEffectivePDAPIKeys(t *testing.T) {
+	// Array takes priority
+	cfg := &Config{PDAPIKeys: []string{"arr1"}, PDAPIKey: "single"}
+	if got := cfg.EffectivePDAPIKeys(); len(got) != 1 || got[0] != "arr1" {
+		t.Errorf("array should take priority, got %v", got)
+	}
+
+	// Falls back to single key
+	cfg2 := &Config{PDAPIKey: "single"}
+	if got := cfg2.EffectivePDAPIKeys(); len(got) != 1 || got[0] != "single" {
+		t.Errorf("expected [single], got %v", got)
+	}
+
+	// Both empty
+	cfg3 := &Config{}
+	if got := cfg3.EffectivePDAPIKeys(); got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
+func TestDefaultConfigPath(t *testing.T) {
+	path, err := DefaultConfigPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path != "config.yaml" {
+		t.Errorf("expected config.yaml, got %q", path)
+	}
+}
+
+func TestLoadInvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.yaml")
+	os.WriteFile(path, []byte("{{invalid yaml"), 0644)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Error("expected error for invalid YAML")
+	}
+}
+
+func TestSaveCreatesNestedDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "a", "b")
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg := DefaultConfig()
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save to nested dir failed: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("file not created: %v", err)
+	}
+}
+
 func TestConfigDirPermissions(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "test_config.yaml")

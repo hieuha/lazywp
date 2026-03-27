@@ -66,15 +66,12 @@ logs.txt
 test-ck
 __pycache__
 
+# Claude Code (private config, not for open source)
+.claude/
+
 # CK meta commands
 prompt.md
 ck.md
-
-# Agent memory (project scope)
-.claude/agent-memory/
-
-# Hook diagnostics logs
-.claude/hooks/.logs/
 
 # Gemini CLI settings (symlink to .claude/.mcp.json)
 .gemini/settings.json

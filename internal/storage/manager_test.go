@@ -291,3 +291,39 @@ func TestItemDir(t *testing.T) {
 		t.Errorf("ItemDir: got %q, want %q", itemDir, expected)
 	}
 }
+
+func TestReadMetadata_NotExist(t *testing.T) {
+	mgr := NewManager(t.TempDir())
+	_, err := mgr.ReadMetadata("plugin", "nonexistent", "1.0")
+	if err == nil {
+		t.Error("expected error for non-existent metadata")
+	}
+}
+
+func TestReadIndex_NotExist(t *testing.T) {
+	mgr := NewManager(t.TempDir())
+	entries, err := mgr.ReadIndex()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entries != nil {
+		t.Errorf("expected nil entries, got %v", entries)
+	}
+}
+
+func TestWriteMetadata_CreatesDir(t *testing.T) {
+	mgr := NewManager(t.TempDir())
+	// Don't call EnsureStructure — WriteMetadata should create dirs itself
+	meta := &Metadata{Slug: "test", Type: "plugin", Version: "1.0"}
+	if err := mgr.WriteMetadata(meta); err != nil {
+		t.Fatalf("WriteMetadata failed: %v", err)
+	}
+	// Verify file exists
+	loaded, err := mgr.ReadMetadata("plugin", "test", "1.0")
+	if err != nil {
+		t.Fatalf("ReadMetadata failed: %v", err)
+	}
+	if loaded.Slug != "test" {
+		t.Errorf("slug: got %q, want test", loaded.Slug)
+	}
+}

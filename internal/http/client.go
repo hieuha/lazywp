@@ -137,3 +137,14 @@ func (c *Client) GetKeyRotator() *KeyRotator {
 func (c *Client) Inner() *http.Client {
 	return c.inner
 }
+
+// NewClientWithInner creates a Client wrapping an existing *http.Client.
+// Intended for use in tests where callers need to redirect requests to a test server.
+func NewClientWithInner(inner *http.Client) *Client {
+	return &Client{
+		inner:       inner,
+		rateLimiter: NewRateLimiter(map[string]float64{}),
+		maxRetries:  0,
+		baseDelay:   0,
+	}
+}

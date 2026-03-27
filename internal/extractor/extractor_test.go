@@ -56,6 +56,54 @@ func TestExtractZipSlip(t *testing.T) {
 	}
 }
 
+func TestExtractInvalidZip(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "bad.zip")
+	os.WriteFile(zipPath, []byte("not a zip"), 0644)
+
+	err := Extract(zipPath, filepath.Join(tmpDir, "out"))
+	if err == nil {
+		t.Fatal("expected error for invalid zip")
+	}
+}
+
+func TestExtractWithDirectoryEntry(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "dirs.zip")
+
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(f)
+	// Add a directory entry (trailing slash)
+	_, err = w.Create("mydir/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw, err := w.Create("mydir/file.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw.Write([]byte("content"))
+	w.Close()
+	f.Close()
+
+	destDir := filepath.Join(tmpDir, "out")
+	if err := Extract(zipPath, destDir); err != nil {
+		t.Fatalf("Extract() error: %v", err)
+	}
+
+	// Verify directory was created
+	info, err := os.Stat(filepath.Join(destDir, "mydir"))
+	if err != nil {
+		t.Fatalf("directory not created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("expected mydir to be a directory")
+	}
+}
+
 func createTestZip(t *testing.T, path string, files map[string]string) {
 	t.Helper()
 	f, err := os.Create(path)
