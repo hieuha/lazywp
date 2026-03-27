@@ -39,10 +39,16 @@ type BatchResult struct {
 	Duration  time.Duration
 }
 
+// WPInfoProvider abstracts WordPress API calls for testability.
+type WPInfoProvider interface {
+	GetInfo(ctx context.Context, slug string) (*client.ItemInfo, error)
+	DownloadURL(slug, version string) string
+}
+
 // Engine orchestrates concurrent downloads with metadata persistence.
 type Engine struct {
 	httpClient *lazywphttp.Client
-	wpClient   *client.WordPressClient
+	wpClient   WPInfoProvider
 	storage    *storage.Manager
 	cfg        *config.Config
 	mu         sync.Mutex // protects error collection
@@ -51,7 +57,7 @@ type Engine struct {
 // NewEngine creates a download engine with the given dependencies.
 func NewEngine(
 	httpClient *lazywphttp.Client,
-	wpClient *client.WordPressClient,
+	wpClient WPInfoProvider,
 	stor *storage.Manager,
 	cfg *config.Config,
 ) *Engine {

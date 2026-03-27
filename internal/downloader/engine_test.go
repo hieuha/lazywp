@@ -458,5 +458,41 @@ func TestDownloadBatch_EmptyJobs(t *testing.T) {
 	}
 }
 
+// --- mockWPProvider for DownloadOne tests ---
+
+type mockWPProvider struct {
+	info        *client.ItemInfo
+	infoErr     error
+	downloadURL string
+}
+
+func (m *mockWPProvider) GetInfo(_ context.Context, _ string) (*client.ItemInfo, error) {
+	return m.info, m.infoErr
+}
+
+func (m *mockWPProvider) DownloadURL(_, _ string) string {
+	return m.downloadURL
+}
+
+// buildTestEngineWithMock constructs an Engine using a mock WPInfoProvider.
+func buildTestEngineWithMock(t *testing.T, provider *mockWPProvider) (*Engine, *storage.Manager) {
+	t.Helper()
+	cfg := &config.Config{
+		Concurrency:    2,
+		RateLimits:     map[string]float64{},
+		RetryMax:       0,
+		RetryBaseDelay: "1ms",
+	}
+	httpClient, err := lazywphttp.NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	stor := storage.NewManager(t.TempDir())
+	if err := stor.EnsureStructure(); err != nil {
+		t.Fatalf("storage.EnsureStructure: %v", err)
+	}
+	return NewEngine(httpClient, provider, stor, cfg), stor
+}
+
 // Ensure wpInfoJSON helper compiles (used in future integration tests).
 var _ = wpInfoJSON
